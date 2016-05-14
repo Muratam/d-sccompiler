@@ -1,7 +1,6 @@
 module smallc.scdef;
 const makeModule = false;
-/+
-static if(!makeModule){
+static if(false){
 	//怪しい
 	// * & ptrptr 
 	// & : id,id[num],*num
@@ -263,9 +262,7 @@ static if(!makeModule){
 		return checkAST(p,env);
 	}
 
-
 }
-+/
 const scdefstr = `SC:
 	Global   <- (Var_def / Fun_proto / Fun_def)+
 	Var_def  < Type Declare (:',' Declare)* :';'

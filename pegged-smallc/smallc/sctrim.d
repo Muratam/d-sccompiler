@@ -123,11 +123,12 @@ bool tryTrim(ref SCTree t){
 		}
 		foreach(ref h;t.hits) trimExpr(h);
 	}
-	void trim(ref SCTree t){
+	
+	void trimThis(ref SCTree t){
+		//literal!.* => literal
 		if (t.tag.startsWith("literal!"))t.tag = "literal";
-		//単純な整形
 		switch(t.tag){
-			case "Stmts": t.hits = t.hits[1..$];break;			
+			case "Stmts": t.hits = t.hits[1..$];return;			
 			case "Fun_declare":{
 				SCTree[] newHits;
 				auto type = t.hits[0];
@@ -146,7 +147,7 @@ bool tryTrim(ref SCTree t){
 					}
 				}
 				t.hits = newHits;
-				break;
+				return;
 			}
 			case "Stmt":{
 				switch(t.hits[0].val){
@@ -156,7 +157,7 @@ bool tryTrim(ref SCTree t){
 							t.hits[3].val = "";
 							t.hits[3].hits ~= t.hits[0].makeLeaf("literal",";");
 						}
-						break;
+						return;
 					}
 					case "for":{
 						SCTree[] newHits ;
@@ -176,7 +177,7 @@ bool tryTrim(ref SCTree t){
 						newHits ~= parseFor(semi,")");
 						newHits ~= t.hits[semi];
 						t.hits = newHits;
-						break;
+						return;
 					}
 					case "while":{
 						SCTree[] newHits;
@@ -187,15 +188,16 @@ bool tryTrim(ref SCTree t){
 						newHits ~= dummyExpr(t);
 						newHits ~= t.hits[2];
 						t.hits = newHits;
-						break;
+						return;
 					}
-					default : break;
+					default : return;
 				}
-				break;
+				return;
 			}
-			default:break;
+			default:return;
 		}
-		//同階層で増えたり減ったりしうる整形
+	}
+	void trimHits(ref SCTree t){
 		SCTree[] newHits;
 		foreach(h;t.hits){
 			switch(h.tag){
@@ -225,6 +227,11 @@ bool tryTrim(ref SCTree t){
 			}
 		}
 		t.hits = newHits;
+	}
+
+	void trim(ref SCTree t){
+		trimThis(t);
+		trimHits(t);
 		foreach(ref h;t.hits){trim(h);}
 	}
 	//予約語チェック

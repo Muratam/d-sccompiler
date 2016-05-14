@@ -7,7 +7,8 @@ static if (!makeModule){
 
 	void analyze(){	
 		ParseTree p ;
-		while(p = SC("void print(int i);" ~ readln()),true){
+		const printproto = "void print(int i);";
+		while(p = SC(readln()),true){
 			if (!p.successful) "Parse Error !!\n\n".writeln;
 			SCTree g = SCTree(p);
 			if (!tryTrim(g)) {
