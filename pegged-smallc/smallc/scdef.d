@@ -148,18 +148,24 @@ static if(false){
 						case "+":case "-": 
 							if (!t1.equal(t2)){
 								if (Op == "+"){
-									if (t1.typeID == "int" && t2.typeID == "intptr") return Type("int","ptr");
-									if (t1.typeID == "int" && t2.typeID == "intptrptr") return Type ("int","ptrptr");
+									if (t1.typeID == "int" && t2.typeID == "intptr") 
+										return Type("int","ptr");
+									if (t1.typeID == "int" && t2.typeID == "intptrptr")
+										return Type ("int","ptrptr");
 								}								
-								if (t1.typeID == "intptr" && t2.typeID == "int") return Type("int","ptr");									
-								if (t1.typeID == "intptrptr" && t2.typeID == "int")return Type("int","ptrptr");
+								if (t1.typeID == "intptr" && t2.typeID == "int") 
+									return Type("int","ptr");									
+								if (t1.typeID == "intptrptr" && t2.typeID == "int")
+									return Type("int","ptrptr");
 							}
 						case "*":case "/": 
-							if (t1.equal(t2) && t1.typeID == "int")	return Type("int");break;
+							if (t1.equal(t2) && t1.typeID == "int")	
+								return Type("int");break;
 						case "==":case "!=":case ">":case "<": case "<=":case ">=": 
 							if (t1.equal(t2)) return Type("int");break;
 						case "&&" :
-							if (t1.equal(t2) && t1.typeID == "int") return Type("int");break;							
+							if (t1.equal(t2) && t1.typeID == "int")
+								return Type("int");break;							
 						case ",": return t2;
 						case "=": 
 							if (t1.equal(t2)) return t1; break;							
