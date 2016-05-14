@@ -82,163 +82,156 @@ struct SCTree {
 	}
 
 }
-SCTree makeTypeInfo(SCTree base,SCTree type,bool ptr = false,string arrayNum = ""){
+private SCTree makeTypeInfo(SCTree base,SCTree type,bool ptr = false,string arrayNum = ""){
 	auto res = base.makeLeaf("Type_info","");
 	res.hits ~= base.makeLeaf(type.tag,type.val);
 	if(ptr) res.hits ~= base.makeLeaf("ptr","ptr");
 	if(arrayNum != "")res.hits ~= base.makeLeaf("array",arrayNum);
 	return res;
 }
-SCTree dummyStmt(SCTree base){
+private SCTree dummyStmt(SCTree base){
 	auto res = base.makeLeaf("Stmt","");
 	res.val = "";
 	res.hits ~= base.makeLeaf("literal",";");
 	return res;
 }
-SCTree dummyExpr(SCTree base){
+private SCTree dummyExpr(SCTree base){
 	auto res = base.makeLeaf("Expr","");
 	res.val = "";
 	res.hits ~= base.makeLeaf("NUM","1");
 	return res;
 }
 
-bool tryTrim(ref SCTree t){
+//予約語チェック
+private bool includesReserved(SCTree t){
+	const reserved = ["int","void","if","while","for","return"];
+	if(t.tag == "ID") return reserved.canFind(t.val);		
+	else return t.hits.any!(a => includesReserved(a));
+}
+//Expr式をトリミング
+private void trimExpr(ref SCTree t){
+	const newTag = "Expr";
+	const exprs = [
+		"Expr","EB00","EB01","EB02","EB03","EB04","EB05","EB06", 
+		"Postfix_expr","Unary_expr","Primary_expr",
+	];
+	if (exprs.canFind(t.tag)){
+		t.tag = newTag;
+		while(t.hits.length == 1 && exprs.canFind(t.hits[0].tag)){
+			t.hits = t.hits[0].hits;
+		}
+	}
+	foreach(ref h;t.hits) trimExpr(h);
+}
+private SCTree parseFor(SCTree t,ref int semi,string separator){
+	if (t.hits[semi].val == separator){
+		semi ++; 
+		return dummyExpr(t);
+	} else {
+		semi += 2;
+		return t.hits[semi-2];
+	}
+}	
 
-	bool includesReserved(SCTree t){
-		const reserved = ["int","void","if","while","for","return"];
-		if(t.tag == "ID") return reserved.canFind(t.val);		
-		else return t.hits.any!(a => includesReserved(a));
-	}
-	void trimExpr(ref SCTree t){
-		const newTag = "Expr";
-		const exprs = [
-			"Expr","EB00","EB01","EB02","EB03","EB04","EB05","EB06", 
-			"Postfix_expr","Unary_expr","Primary_expr",
-		];
-		if (exprs.canFind(t.tag)){
-			t.tag = newTag;
-			while(t.hits.length == 1 && exprs.canFind(t.hits[0].tag)){
-				t.hits = t.hits[0].hits;
-			}
-		}
-		foreach(ref h;t.hits) trimExpr(h);
-	}
-	
-	void trimThis(ref SCTree t){
-		//literal!.* => literal
-		if (t.tag.startsWith("literal!"))t.tag = "literal";
-		switch(t.tag){
-			case "Stmts": t.hits = t.hits[1..$];return;			
-			case "Fun_declare":{
-				SCTree[] newHits;
-				auto type = t.hits[0];
-				auto isPtr = t.hits[1].canFindByVal("*");
-				newHits ~= makeTypeInfo(t,type,isPtr);
-				newHits ~= t.hits[1].searchByTag("ID");
-				if(t.hits.length > 2){
-					foreach(h;t.hits[2..$]){
-						auto newParam = h.makeLeaf();
-						auto ptype = h.searchByTag("Type");
-						auto pid = h.searchByTag("ID");
-						auto pisPtr = h.canFindByVal("*");
-						newParam.hits ~= makeTypeInfo(h,ptype,pisPtr);
-						newParam.hits ~= pid;
-						newHits ~= newParam;
-					}
-				}
-				t.hits = newHits;
-				return;
-			}
-			case "Stmt":{
-				switch(t.hits[0].val){
-					case "if":{
-						if (t.hits.length == 3){
-							t.hits ~= t.hits[0].makeLeaf("Stmt","");
-							t.hits[3].val = "";
-							t.hits[3].hits ~= t.hits[0].makeLeaf("literal",";");
-						}
-						return;
-					}
-					case "for":{
-						SCTree[] newHits ;
-						int semi = 1;
-						SCTree parseFor(ref int semi,string separator){
-							if (t.hits[semi].val == separator){
-								semi ++; 
-								return dummyExpr(t);
-							} else {
-								semi += 2;
-								return t.hits[semi-2];
-							}
-						}	
-						newHits ~= t.hits[0];
-						newHits ~= parseFor(semi,";");
-						newHits ~= parseFor(semi,";");
-						newHits ~= parseFor(semi,")");
-						newHits ~= t.hits[semi];
-						t.hits = newHits;
-						return;
-					}
-					case "while":{
-						SCTree[] newHits;
-						newHits ~= t.hits[0];
-						newHits[0].val = "for";
-						newHits ~= dummyExpr(t);
-						newHits ~= t.hits[1];
-						newHits ~= dummyExpr(t);
-						newHits ~= t.hits[2];
-						t.hits = newHits;
-						return;
-					}
-					default : return;
-				}
-				return;
-			}
-			default:return;
-		}
-	}
-	void trimHits(ref SCTree t){
+private void trimThis(ref SCTree t){
+	if (t.tag.startsWith("literal!"))t.tag = "literal";
+	switch(t.tag){
+	case "Stmts": 
+		t.hits = t.hits[1..$];
+		return;			
+	case "Fun_declare":
 		SCTree[] newHits;
-		foreach(h;t.hits){
-			switch(h.tag){
-				case "Var_def":{
-					auto type = h.hits[0];
-					foreach(hh;h.hits[1..$]){
-						auto H = h.makeLeaf();
-						bool isPtr = hh.canFindByVal("*");
-						string isArray = hh.searchByTag("NUM").val;
-						H.hits ~= makeTypeInfo(h,type,isPtr,isArray);	
-						H.hits ~= hh.searchByTag("ID");
-						newHits ~= H;
-					}
-					break;
-				}		
-				case "Array":{
-					newHits ~= h.makeLeaf("literal","*");
-					auto expr = h.makeLeaf("Expr", "");
-					expr.val = "";
-					expr.hits ~= h.hits[0];
-					expr.hits ~= h.makeLeaf("literal","+");
-					expr.hits ~= h.hits[1];
-					newHits ~= expr;
-					break;
-				}
-				default: newHits ~= h;break;
-			}
+		auto type = t.hits[0];
+		auto isPtr = t.hits[1].canFindByVal("*");
+		newHits ~= makeTypeInfo(t,type,isPtr);
+		newHits ~= t.hits[1].searchByTag("ID");
+		if(t.hits.length > 2){
+			foreach(h;t.hits[2..$]){
+				auto newParam = h.makeLeaf();
+				auto ptype = h.searchByTag("Type");
+				auto pid = h.searchByTag("ID");
+				auto pisPtr = h.canFindByVal("*");
+				newParam.hits ~= makeTypeInfo(h,ptype,pisPtr);
+				newParam.hits ~= pid;
+				newHits ~= newParam;
+			}		
 		}
 		t.hits = newHits;
+		return;	
+	case "Stmt":
+		switch(t.hits[0].val){
+		case "if":
+			if (t.hits.length == 3){
+				t.hits ~= t.hits[0].makeLeaf("Stmt","");
+				t.hits[3].val = "";
+				t.hits[3].hits ~= t.hits[0].makeLeaf("literal",";");
+			}
+			return;		
+		case "for":
+			SCTree[] newHits ;
+			int semi = 1;
+			newHits ~= t.hits[0];
+			newHits ~= t.parseFor(semi,";");
+			newHits ~= t.parseFor(semi,";");
+			newHits ~= t.parseFor(semi,")");
+			newHits ~= t.hits[semi];
+			t.hits = newHits;
+			return;		
+		case "while":
+			SCTree[] newHits;
+			newHits ~= t.hits[0];
+			newHits[0].val = "for";
+			newHits ~= dummyExpr(t);
+			newHits ~= t.hits[1];
+			newHits ~= dummyExpr(t);
+			newHits ~= t.hits[2];
+			t.hits = newHits;
+			return;		
+		default : return;
+		}	
+	default:return;
 	}
+}
+private void trimHits(ref SCTree t){
+	SCTree[] newHits;
+	foreach(h;t.hits){
+		switch(h.tag){
+		case "Var_def":
+			auto type = h.hits[0];
+			foreach(hh;h.hits[1..$]){
+				auto H = h.makeLeaf();
+				bool isPtr = hh.canFindByVal("*");
+				string isArray = hh.searchByTag("NUM").val;
+				H.hits ~= makeTypeInfo(h,type,isPtr,isArray);	
+				H.hits ~= hh.searchByTag("ID");
+				newHits ~= H;
+			}
+			break;		
+		case "Array":
+			newHits ~= h.makeLeaf("literal","*");
+			auto expr = h.makeLeaf("Expr", "");
+			expr.val = "";
+			expr.hits ~= h.hits[0];
+			expr.hits ~= h.makeLeaf("literal","+");
+			expr.hits ~= h.hits[1];
+			newHits ~= expr;
+			break;		
+		default: 
+			newHits ~= h;break;
+		}
+	}
+	t.hits = newHits;
+}
+//整形
+private void trim(ref SCTree t){
+	trimThis(t);
+	trimHits(t);
+	foreach(ref h;t.hits){trim(h);}
+}
 
-	void trim(ref SCTree t){
-		trimThis(t);
-		trimHits(t);
-		foreach(ref h;t.hits){trim(h);}
-	}
-	//予約語チェック
+bool tryTrim(ref SCTree t){	
 	if(includesReserved(t)) return false;
-	//Expr式をトリミング
 	trimExpr(t);
-	//整形
 	trim(t);
 	return true;
 }
