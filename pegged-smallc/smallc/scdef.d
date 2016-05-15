@@ -32,4 +32,6 @@ const scdefstr = `SC:
 	Def_ID   < (^'*')? ID
 	ID       < identifier
 	NUM      < ~([0-9]+)
+	SP       <~ (space / endOfLine / Comment)*
+	Comment  <~ '//' (!endOfLine .)* endOfLine 
 `;
