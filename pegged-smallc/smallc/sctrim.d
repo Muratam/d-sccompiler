@@ -2,7 +2,6 @@ module smallc.sctrim;
 import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv;
 import pegged.grammar;
 
-//includesReserved : ID の 予約語チェック
 //trimExpr         : Expr系の トリミング
 //trim : 整形 =>
 //      Stmts : [Var_def*,Stmt*]
@@ -102,12 +101,6 @@ private SCTree dummyExpr(SCTree base){
 	return res;
 }
 
-//予約語チェック
-private bool includesReserved(SCTree t){
-	const reserved = ["int","void","if","while","for","return"];
-	if(t.tag == "ID") return reserved.canFind(t.val);		
-	else return t.hits.any!(a => includesReserved(a));
-}
 //Expr式をトリミング
 private void trimExpr(ref SCTree t){
 	const newTag = "Expr";
@@ -230,7 +223,6 @@ private void trim(ref SCTree t){
 }
 
 bool tryTrim(ref SCTree t){	
-	if(includesReserved(t)) return false;
 	trimExpr(t);
 	trim(t);
 	return true;

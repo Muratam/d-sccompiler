@@ -1,7 +1,8 @@
 module smallc.scdef;
 const makeModule = false;
+
 const scdefstr = `SC:
-	Global   <- (Var_def / Fun_proto / Fun_def)+
+	Global   <- (Var_def / Fun_proto / Fun_def)+ endOfInput?
 	Var_def  < Type Declare (:',' Declare)* :';'
 	Fun_proto < Fun_declare ';'
 	Fun_def  < Fun_declare Stmts
@@ -30,8 +31,8 @@ const scdefstr = `SC:
 	Type     < 'int' / 'void'
 	Declare  < Def_ID (:'[' NUM ']')? 
 	Def_ID   < (^'*')? ID
-	ID       < identifier
+	ID       < !Keyword identifier
 	NUM      < ~([0-9]+)
-	SP       <~ (space / endOfLine / Comment)*
-	Comment  <~ '//' (!endOfLine .)* endOfLine 
+	Keyword  < Type / 'if' / 'while' / 'for' / 'return' 
 `;
+//	Spacing  < (space / endOfLine)+

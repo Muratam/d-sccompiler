@@ -17,7 +17,7 @@ struct Var {
 		return Var(id.val,res,level);
 	}
 	public string toString() const {
-		return "(" ~ name ~ " : " ~ type.to!string ~ " , " ~ level.to!string ~ ")";
+		return "(" ~ name ~ ":" ~ type.to!string ~ "," ~ level.to!string ~ ")";
 	}
 }
 

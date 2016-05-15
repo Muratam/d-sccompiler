@@ -2,7 +2,7 @@
 This module was automatically generated from the following grammar:
 
 SC:
-	Global   <- (Var_def / Fun_proto / Fun_def)+
+	Global   <- (Var_def / Fun_proto / Fun_def)+ endOfInput?
 	Var_def  < Type Declare (:',' Declare)* :';'
 	Fun_proto < Fun_declare ';'
 	Fun_def  < Fun_declare Stmts
@@ -31,8 +31,9 @@ SC:
 	Type     < 'int' / 'void'
 	Declare  < Def_ID (:'[' NUM ']')? 
 	Def_ID   < (^'*')? ID
-	ID       < identifier
+	ID       < !Keyword identifier
 	NUM      < ~([0-9]+)
+	Keyword  < Type / 'if' / 'while' / 'for' / 'return' 
 
 
 +/
@@ -110,6 +111,7 @@ struct GenericSC(TParseTree)
         rules["Def_ID"] = toDelegate(&Def_ID);
         rules["ID"] = toDelegate(&ID);
         rules["NUM"] = toDelegate(&NUM);
+        rules["Keyword"] = toDelegate(&Keyword);
         rules["Spacing"] = toDelegate(&Spacing);
     }
 
@@ -174,7 +176,7 @@ struct GenericSC(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.oneOrMore!(pegged.peg.or!(Var_def, Fun_proto, Fun_def)), "SC.Global")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.oneOrMore!(pegged.peg.or!(Var_def, Fun_proto, Fun_def)), pegged.peg.option!(endOfInput)), "SC.Global")(p);
         }
         else
         {
@@ -182,7 +184,7 @@ struct GenericSC(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.oneOrMore!(pegged.peg.or!(Var_def, Fun_proto, Fun_def)), "SC.Global"), "Global")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.oneOrMore!(pegged.peg.or!(Var_def, Fun_proto, Fun_def)), pegged.peg.option!(endOfInput)), "SC.Global"), "Global")(p);
                 memo[tuple(`Global`, p.end)] = result;
                 return result;
             }
@@ -193,12 +195,12 @@ struct GenericSC(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.oneOrMore!(pegged.peg.or!(Var_def, Fun_proto, Fun_def)), "SC.Global")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.oneOrMore!(pegged.peg.or!(Var_def, Fun_proto, Fun_def)), pegged.peg.option!(endOfInput)), "SC.Global")(TParseTree("", false,[], s));
         }
         else
         {
             forgetMemo();
-            return hooked!(pegged.peg.defined!(pegged.peg.oneOrMore!(pegged.peg.or!(Var_def, Fun_proto, Fun_def)), "SC.Global"), "Global")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.oneOrMore!(pegged.peg.or!(Var_def, Fun_proto, Fun_def)), pegged.peg.option!(endOfInput)), "SC.Global"), "Global")(TParseTree("", false,[], s));
         }
     }
     static string Global(GetName g)
@@ -1157,7 +1159,7 @@ struct GenericSC(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, identifier, Spacing), "SC.ID")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.negLookahead!(pegged.peg.wrapAround!(Spacing, Keyword, Spacing)), pegged.peg.wrapAround!(Spacing, identifier, Spacing)), "SC.ID")(p);
         }
         else
         {
@@ -1165,7 +1167,7 @@ struct GenericSC(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, identifier, Spacing), "SC.ID"), "ID")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.negLookahead!(pegged.peg.wrapAround!(Spacing, Keyword, Spacing)), pegged.peg.wrapAround!(Spacing, identifier, Spacing)), "SC.ID"), "ID")(p);
                 memo[tuple(`ID`, p.end)] = result;
                 return result;
             }
@@ -1176,12 +1178,12 @@ struct GenericSC(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, identifier, Spacing), "SC.ID")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.negLookahead!(pegged.peg.wrapAround!(Spacing, Keyword, Spacing)), pegged.peg.wrapAround!(Spacing, identifier, Spacing)), "SC.ID")(TParseTree("", false,[], s));
         }
         else
         {
             forgetMemo();
-            return hooked!(pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, identifier, Spacing), "SC.ID"), "ID")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.negLookahead!(pegged.peg.wrapAround!(Spacing, Keyword, Spacing)), pegged.peg.wrapAround!(Spacing, identifier, Spacing)), "SC.ID"), "ID")(TParseTree("", false,[], s));
         }
     }
     static string ID(GetName g)
@@ -1223,6 +1225,42 @@ struct GenericSC(TParseTree)
     static string NUM(GetName g)
     {
         return "SC.NUM";
+    }
+
+    static TParseTree Keyword(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Type, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing)), "SC.Keyword")(p);
+        }
+        else
+        {
+            if (auto m = tuple(`Keyword`, p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Type, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing)), "SC.Keyword"), "Keyword")(p);
+                memo[tuple(`Keyword`, p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree Keyword(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Type, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing)), "SC.Keyword")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            forgetMemo();
+            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Type, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing)), "SC.Keyword"), "Keyword")(TParseTree("", false,[], s));
+        }
+    }
+    static string Keyword(GetName g)
+    {
+        return "SC.Keyword";
     }
 
     static TParseTree opCall(TParseTree p)
