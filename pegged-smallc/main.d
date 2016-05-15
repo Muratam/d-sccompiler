@@ -8,7 +8,6 @@ static if (!makeModule){
 	void analyze(string code){	
 		const printproto = "";//"void print(int i){}";
 		ParseTree p = SC(printproto ~ code);
-		p.writeln;
 		if (!p.successful) {
 			"Parse Error !!\n\n".writeln;
 			return;
