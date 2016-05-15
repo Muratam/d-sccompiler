@@ -45,6 +45,10 @@ private bool writeError(SCTree t,string str){
 	writeln(str ~ " [" ~ t.begin.to!string ~ "," ~t.end.to!string ~ "]");
 	return false;
 }
+private SCType writeTypeError(SCTree t,string str){
+	writeln(str ~ " [" ~ t.begin.to!string ~ "," ~t.end.to!string ~ "]");
+	return null;
+}
 private bool addVar(ref SCType[string][] env,string id,SCType type,string info = ""){
 	if (id in env.last) {
 		if (type.isFunction){
@@ -88,19 +92,19 @@ private SCType checkStmtType(ref SCType[string][] env,SCTree t){
 	if (t.hits.length == 0) return new SCType("void");
 	switch(t.hits[0].val){
 	case "if":
-		return env.checkHitsType(t.hits[1..3]);
-	case "for":
 		return env.checkHitsType(t.hits[1..4]);
+	case "for":
+		return env.checkHitsType(t.hits[1..5]);
 	case "return":
 		auto returnType = env[0]["#returnType"];
 		if(returnType.type == "void"){
 			if (t.hits.length == 1) return new SCType("void");
-			else return null;
+			else return t.writeTypeError("return type must be void !!!");
 		}else{
-			if (t.hits.length == 1) return null;
+			if (t.hits.length == 1) return t.writeTypeError("return type must not be void !!");
 			if (returnType.type == env.checkType(t.hits[1]).type) 
 				return new SCType("void");
-			return null;
+			return t.writeTypeError("return type differs!!!");
 		}
 	case ";":
 		return new SCType("void");
@@ -126,11 +130,12 @@ private SCType checkExprType(ref SCType[string][] env,SCTree t){
 		if (type1 is null) return null;
 		final switch (operator){
 		case "&": 
-			return op1(type1,["int","int *"]);
+			if(t.hits[1].hits.length == 1 && t.hits[1].hits[0].tag == "ID"){
+				return op1(type1,["int","int *"]);
+			}else return t.writeTypeError("can't '&' operator not for variable");
 		case "*": 
 			return op1(type1,["int *","int"],["int * *","int *"]);
 		}
-		return null;
 	case 3:
 		auto type1 = env.checkType(t.hits[0]);
 		auto type2 = env.checkType(t.hits[2]);
@@ -174,27 +179,30 @@ private SCType checkType(ref SCType[string][] env,SCTree t){
 		foreach_reverse(v;env){
 			if(id !in v)continue;
 			auto regestered = v[id];
-			if (! regestered.isFunction)return null;
+			if (! regestered.isFunction)
+				return t.writeTypeError(id ~ " is not function!");
 			if (regestered.args.length != t.hits.length -1)
-				return null;
+				return t.writeTypeError(id ~ ": arg size wrong !!");
 			if (regestered.args.length > 0){
 				auto params = t.hits[1..$].map!(a=>env.checkType(a));
-				if(params.any!(a => a is null)) return null;
+				if(params.any!(a => a is null)) 
+					return t.writeTypeError(id ~ ": args illegal !!");
 				if(zip(params,regestered.args).any!(a=>!a[0].sameType(a[1])))
-					return null;
+					return t.writeTypeError(id ~ ": args type differs !!");
 			}
 			return new SCType(regestered.type);
 		}
-		return null;
+		return t.writeTypeError(id ~ " was not declared !!");
 	case "ID":
 		auto id = t.val ;
 		foreach_reverse(v;env){
 			if (id !in v) continue;
 			auto regestered = v[id];
-			if (regestered.isFunction) return null;					
+			if (regestered.isFunction) 
+				return t.writeTypeError(id ~ " was regestered as function !!");					
 			return regestered;
 		}
-		return null;
+		return t.writeTypeError(id ~ " was not delcared !! ");
 	case "NUM":	
 		return new SCType("int");
 	}

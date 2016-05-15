@@ -133,18 +133,46 @@ class CmpdStmt : Stmt{
 			case "ID":
 				auto assigned = Var_def.searchVar(t.hits[0].val,level);
 				return new AssignStmt(assigned,new VarExpr(assigned));
-			//case "Apply":
+			//case "Apply"://print
 			}
 		case 2:
-			//case "*":case "&":
-			//break;
+			auto added1 = addExpr(t.hits[1]);
+			string op = t.hits[0].val;
+			final switch(op){
+			case "&":
+				assert (added1.var.type == EType.Int);
+				return makeTemp(EType.Intptr,new AddrExpr(added1.var));
+			case "*"://temp = *(added1)
+				assert (added1.var.type != EType.Int);
+				auto type = added1.var.type == EType.Intptr ? EType.Int: EType.Intptr;
+				auto temp = Var_def.temp(type,this.level);
+				vars ~= temp;
+				auto read = new ReadMemStmt(temp.var,added1.var);
+				stmts ~= read;
+				return new AssignStmt(temp.var,new VarExpr(temp.var));
+			}
 		case 3:
+			string op = t.hits[1].val;
+			if (op == "=" && t.hits[0].hits.length == 2 && t.hits[0].hits[0].val == "*"){
+				//*(a+2) = added2
+				auto added2 = addExpr(t.hits[2]);
+				auto ptr = addExpr(t.hits[0].hits[1]);
+				auto wrote = new WriteMemStmt(ptr.var,added2.var);
+				stmts ~= wrote;
+				return added2;
+			}
 			auto added1 = addExpr(t.hits[0]);
 			auto added2 = addExpr(t.hits[2]);
-			string op = t.hits[1].val;
-			switch(op){
-			//case "+":case "-":
-			//case ",":case "||":case "&&"
+			final switch(op){				
+			//case "||":case "&&"
+			case ",":
+				return added2;
+			case "+":case "-":
+				if(added1.var.type != EType.Int || added2.var.type != EType.Int){
+					auto ptr = added1.var.type == EType.Int ? added2:added1;
+					auto num = added1.var.type == EType.Int ? added1:added2;
+					return makeTemp(ptr.var.type,new AopExpr(op,ptr.var,num.var));
+				}
 			case "*":case "/":
 				return makeTemp(EType.Int, new AopExpr(op,added1.var,added2.var));
 			case "==":case "!=":case "<":case ">":case "<=":case ">=":
@@ -153,11 +181,23 @@ class CmpdStmt : Stmt{
 				auto assigned = new AssignStmt(added1.var,new VarExpr(added2.var));
 				stmts ~= assigned;
 				return assigned;
-			default:break;
 			}
-			break;
 		}
-		assert(0);
+	}
+
+	void addIfStmt(SCTree expr,SCTree tStmt,SCTree fStmt){
+		auto var = addExpr(expr);
+		auto tlabel = LabelStmt.temp();
+		auto flabel = LabelStmt.temp();
+		auto finlabel = LabelStmt.temp();
+		stmts ~= new IfStmt(var.var,new GotoStmt(tlabel),new GotoStmt(flabel));
+		stmts ~= tlabel;
+		addStmt(tStmt);
+		stmts ~= new GotoStmt(finlabel);
+		stmts ~= flabel;
+		addStmt(fStmt);
+		stmts ~= finlabel;
+		return;
 	}
 
 	void addStmt(SCTree t){
@@ -169,22 +209,34 @@ class CmpdStmt : Stmt{
 		assert(t.tag == "Stmt");
 		switch(t.hits[0].val){
 		case "if":
-			auto var = addExpr(t.hits[1]);
-			auto tlabel = LabelStmt.temp();
-			auto flabel = LabelStmt.temp();
-			auto finlabel = LabelStmt.temp();
-			stmts ~= new IfStmt(var.var,new GotoStmt(tlabel),new GotoStmt(flabel));
-			stmts ~= tlabel;
-			addStmt(t.hits[2]);
-			stmts ~= new GotoStmt(finlabel);
-			stmts ~= flabel;
-			addStmt(t.hits[3]);
-			stmts ~= finlabel;
+			addIfStmt(t.hits[1],t.hits[2],t.hits[3]);
 			return;
 		case "for":
+			//for(1;2;3)a; => 1;while(2){a;3} => 1;L0;if(2 :L1:L2){L1;a;3;goto L0;};L2;
+			auto loopProdLabel = LabelStmt.temp();
+			auto whileMainLabel = LabelStmt.temp();
+			auto loopfinishLabel = LabelStmt.temp();
+			auto var1 = addExpr(t.hits[1]);
+			stmts ~= loopProdLabel;
+			auto var2 = addExpr(t.hits[2]);
+			stmts ~= new IfStmt(
+					 var2.var
+					,new GotoStmt(whileMainLabel)
+					,new GotoStmt(loopfinishLabel));
+			stmts ~= whileMainLabel;
+			addStmt(t.hits[4]);
+			auto var3 = addExpr(t.hits[3]);
+			stmts ~= new GotoStmt(loopProdLabel);
+			stmts ~= loopfinishLabel;
 			return;
 		case "return":
-			//stmts ~= new ReturnStmt(h);
+			if(t.hits.length == 1){				 
+				auto ret = makeTemp(EType.Int,new LitExpr(0));
+				stmts ~= new ReturnStmt(ret.var);
+			}else{
+				auto ret = addExpr(t.hits[1]);
+				stmts ~= new ReturnStmt(ret.var);
+			}
 			return;
 		default:
 			break;
@@ -233,13 +285,27 @@ class AssignStmt : Stmt{
 		return "AssignStmt : " ~ var.toString() ~ " <" ~ expr.toString() ~ ">";
 	}
 }
-// a = 0 ; 
+// *(a + 3) = b ; a:intptr ,b:int ; a:intptrtpr ,b:intptr 
 class WriteMemStmt : Stmt{
 	public Var dest,src;
+	public this(Var dest,Var src){
+		this.dest = dest;
+		this.src = src;
+	}
+	public override string toString() const {
+		return "WriteMemStmt :" ~  dest.toString() ~ " <- " ~ src.toString();
+	}
 }
-// 
+// b = *(a + 3); 
 class ReadMemStmt : Stmt{ 
 	public Var dest,src;
+	public this(Var dest,Var src){
+		this.dest = dest;
+		this.src = src;
+	}
+	public override string toString() const {
+		return "ReadMemStmt :" ~  dest.toString() ~ " <- " ~ src.toString();
+	}
 }
 class IfStmt : Stmt{
 	public Var var;
@@ -265,6 +331,8 @@ class GotoStmt : Stmt{
 class ApplyStmt : Stmt{ 
 	public Var dest,target;
 	public Var[] args;
+	public this (){}
+
 }
 class ReturnStmt : Stmt{ 
 	public Var var;
@@ -291,6 +359,8 @@ class LabelStmt : Stmt{
 	}
 	public static void init(){tempIndex = 0;}
 }
+
+
 class Expr{
 	public this(){}
 	public override string toString () const {
@@ -323,6 +393,12 @@ class AopExpr : Expr{ // + - * /
 		return "AopExpr " ~ L.toString() ~ " \"" ~ Op ~ "\" " ~ R.toString() ;
 	}
 }
-class AddrExpr : Expr{ //&a
+class AddrExpr : Expr{ //&(a)
 	public Var var;
+	public this(Var var){
+		this.var = var;
+	}
+	public override string toString() const {
+		return "AddrExpr " ~ var.toString() ;
+	}
 }

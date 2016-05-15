@@ -183,15 +183,19 @@ private void trimThis(ref SCTree t){
 		default : return;
 		}	
 	case "Expr":
+		
 		if(t.hits.length != 2) return;
-		if(t.hits[0].val != "-") return ;
-		SCTree[] newHits;
-		newHits ~= t.makeLeaf("Expr");
-		newHits[0].hits ~= t.makeLeaf("NUM","0");
-		newHits ~= t.hits[0];
-		newHits ~= t.hits[1];
-		t.hits = newHits;
-		return ;
+		switch(t.hits[0].val){
+		case "-":
+			SCTree[] newHits;
+			newHits ~= t.makeLeaf("Expr");
+			newHits[0].hits ~= t.makeLeaf("NUM","0");
+			newHits ~= t.hits[0];
+			newHits ~= t.hits[1];
+			t.hits = newHits;
+			return;
+		default :return;
+		}
 	default:return;
 	}
 }
@@ -218,9 +222,29 @@ private void trimHits(ref SCTree t){
 			expr.hits ~= h.makeLeaf("literal","+");
 			expr.hits ~= h.hits[1];
 			newHits ~= expr;
-			break;		
+			break;	
 		default: 
-			newHits ~= h;break;
+			newHits ~= h;
+			break;
+		}
+	}
+	t.hits = newHits;
+}
+private void trimHits2(ref SCTree t){
+	SCTree[] newHits;
+	foreach(h;t.hits){
+		switch(h.tag){
+		case "Expr":
+			if(h.hits.length == 2 
+				&& h.hits[0].val == "&"
+				&& h.hits[1].hits.length == 2 
+				&& h.hits[1].hits[0].val == "*"){
+					newHits ~= h.hits[1].hits[1];
+					break;
+			}
+		default: 
+			newHits ~= h;
+			break;
 		}
 	}
 	t.hits = newHits;
@@ -231,9 +255,14 @@ private void trim(ref SCTree t){
 	trimHits(t);
 	foreach(ref h;t.hits){trim(h);}
 }
+private void trim2(ref SCTree t){
+	trimHits2(t);
+	foreach(ref h;t.hits){trim2(h);}
+}
 
 bool tryTrim(ref SCTree t){	
 	trimExpr(t);
 	trim(t);
+	trim2(t);
 	return true;
 }

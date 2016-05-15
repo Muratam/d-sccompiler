@@ -6,7 +6,7 @@ static if (!makeModule){
 	import smallc.sc;
 
 	void analyze(string code){	
-		const printproto = "";//"void print(int i){}";
+		const printproto = "void print(int i){}";
 		ParseTree p = SC(printproto ~ code);
 		if (!p.successful) {
 			"Parse Error !!\n\n".writeln;
