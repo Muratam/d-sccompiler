@@ -11,7 +11,7 @@ import pegged.grammar;
 //       Stmt : if => ["If",Expr,Stmt,Stmt]
 //            : for,while => ["for",Expr,Expr,Expr,Stmt]
 //      Array : a[b] => *(a + b)
-
+//         -a : 0 - a 
 
 struct SCTree {
 	string tag = ""; 
@@ -182,6 +182,16 @@ private void trimThis(ref SCTree t){
 			return;		
 		default : return;
 		}	
+	case "Expr":
+		if(t.hits.length != 2) return;
+		if(t.hits[0].val != "-") return ;
+		SCTree[] newHits;
+		newHits ~= t.makeLeaf("Expr");
+		newHits[0].hits ~= t.makeLeaf("NUM","0");
+		newHits ~= t.hits[0];
+		newHits ~= t.hits[1];
+		t.hits = newHits;
+		return ;
 	default:return;
 	}
 }

@@ -116,7 +116,7 @@ private SCType checkStmtType(ref SCType[string][] env,SCTree t){
 	}
 }
 private SCType checkExprType(ref SCType[string][] env,SCTree t){
-	// [Expr,"||",Expr] / ["-",Expr] / [Expr]		
+	// [Expr,"||",Expr] / ["*",Expr] / [Expr]		
 	final switch(t.hits.length){
 	case 1: 
 		return env.checkType(t.hits[0]);
@@ -125,8 +125,6 @@ private SCType checkExprType(ref SCType[string][] env,SCTree t){
 		auto type1 = env.checkType(t.hits[1]);
 		if (type1 is null) return null;
 		final switch (operator){
-		case "-": 
-			return op1(type1,["int","int"]);
 		case "&": 
 			return op1(type1,["int","int *"]);
 		case "*": 

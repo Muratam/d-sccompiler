@@ -35,6 +35,7 @@ class Global{
 	public Fun_def[] fun_defs = [];
 	public this (SCTree t){
 		Var_def.init();
+		LabelStmt.init();
 		if (t.tag == "SC")t = t.hits[0];
 		assert (t.tag == "Global");
 		foreach(h;t.hits){
@@ -122,28 +123,31 @@ class CmpdStmt : Stmt{
 		stmts ~= assigned;
 		return assigned;
 	}
-	Stmt addExpr(SCTree t){
-		assert(t.tag == "Expr");
-		
-		switch(t.hits.length){
+	AssignStmt addExpr(SCTree t){
+		assert(t.tag == "Expr");		
+		final switch(t.hits.length){
 		case 1:
-			switch(t.hits[0].tag){
+			final switch(t.hits[0].tag){
 			case "NUM":
 				return makeTemp(EType.Int,new LitExpr(t.hits[0].val.to!int));
 			case "ID":
 				auto assigned = Var_def.searchVar(t.hits[0].val,level);
 				return new AssignStmt(assigned,new VarExpr(assigned));
-			default:break;
+			//case "Apply":
 			}
-			break;
 		case 2:
-			break;
+			//case "*":case "&":
+			//break;
 		case 3:
-			auto added1 = cast(AssignStmt) addExpr(t.hits[0]);
-			auto added2 = cast(AssignStmt) addExpr(t.hits[2]);
+			auto added1 = addExpr(t.hits[0]);
+			auto added2 = addExpr(t.hits[2]);
 			string op = t.hits[1].val;
 			switch(op){
+			//case "+":case "-":
+			//case ",":case "||":case "&&"
 			case "*":case "/":
+				return makeTemp(EType.Int, new AopExpr(op,added1.var,added2.var));
+			case "==":case "!=":case "<":case ">":case "<=":case ">=":
 				return makeTemp(EType.Int, new AopExpr(op,added1.var,added2.var));
 			case "=":
 				auto assigned = new AssignStmt(added1.var,new VarExpr(added2.var));
@@ -152,51 +156,63 @@ class CmpdStmt : Stmt{
 			default:break;
 			}
 			break;
-		default:break;
 		}
-		return new Stmt();
+		assert(0);
+	}
+
+	void addStmt(SCTree t){
+		if(t.tag == "Var_def"){
+			vars ~= new Var_def(Var.make(t,level));
+			return;
+		}
+		if (t.hits.length == 0) return;
+		assert(t.tag == "Stmt");
+		switch(t.hits[0].val){
+		case "if":
+			auto var = addExpr(t.hits[1]);
+			auto tlabel = LabelStmt.temp();
+			auto flabel = LabelStmt.temp();
+			auto finlabel = LabelStmt.temp();
+			stmts ~= new IfStmt(var.var,new GotoStmt(tlabel),new GotoStmt(flabel));
+			stmts ~= tlabel;
+			addStmt(t.hits[2]);
+			stmts ~= new GotoStmt(finlabel);
+			stmts ~= flabel;
+			addStmt(t.hits[3]);
+			stmts ~= finlabel;
+			return;
+		case "for":
+			return;
+		case "return":
+			//stmts ~= new ReturnStmt(h);
+			return;
+		default:
+			break;
+		}
+		switch(t.hits[0].tag){
+		case "Expr":
+			addExpr(t.hits[0]);
+			return;
+		case "Stmts":
+			stmts ~= new CmpdStmt(t.hits[0],level+1);
+			return;
+		default:
+			return;
+		}
 	}
 	public this(SCTree t,int level){
 		assert(t.tag == "Stmts");
 		this.level = level;
-		foreach(h;t.hits){
-			if(h.tag == "Var_def"){
-				vars ~= new Var_def(Var.make(h,level));
-				continue;
-			}
-			if (h.hits.length == 0) continue;
-			switch(h.hits[0].val){
-			case "if":
-				stmts ~= new IfStmt(h);
-				continue;
-			case "for":
-				continue;
-			case "return":
-				stmts ~= new ReturnStmt(h);
-				continue;
-			default:
-				break;			
-			}
-			switch(h.hits[0].tag){
-			case "Expr":
-				addExpr(h.hits[0]);
-				continue;
-			case "Stmts":
-				stmts ~= new CmpdStmt(h.hits[0],level+1);
-				continue;
-			default:
-				continue;
-			}
-		}
+		foreach(h;t.hits){addStmt(h);}
 	}
 	public override string toString () const {
 		auto tab = "";
 		foreach(i;iota(level))tab ~= "  ";
-		auto res = "CmpdStmt : \n";
+		auto res = "CmpdStmt : ";
 		if (vars.length > 0)
-			res ~= vars.map!(a=>tab ~ a.toString() ~ "\n").fold!"a~b";
+			res ~= vars.map!(a=>"\n" ~ tab ~ a.toString()).fold!"a~b";
 		if (stmts.length > 0)
-			res ~= stmts.map!(a=>tab ~ a.toString() ~ "\n").fold!"a~b";
+			res ~= stmts.map!(a=>"\n" ~ tab ~ a.toString()).fold!"a~b";
 		return res ;
 	}
 }
@@ -217,22 +233,34 @@ class AssignStmt : Stmt{
 		return "AssignStmt : " ~ var.toString() ~ " <" ~ expr.toString() ~ ">";
 	}
 }
+// a = 0 ; 
 class WriteMemStmt : Stmt{
 	public Var dest,src;
 }
+// 
 class ReadMemStmt : Stmt{ 
 	public Var dest,src;
 }
 class IfStmt : Stmt{
 	public Var var;
-	public LabelStmt l1,l2;
-	public this (SCTree t){}
+	public GotoStmt tlabel,flabel;
+	public this (Var var,GotoStmt tlabel,GotoStmt flabel){
+		this.var = var;
+		this.tlabel = tlabel;
+		this.flabel = flabel;			
+	}
 	public override string toString() const {
-		return "ifStmt";
+		return "IfStmt : " ~ var.toString() ~"["~ tlabel.toString() ~ "," ~ flabel.toString()~"]";
 	}
 }
 class GotoStmt : Stmt{ 
-	public LabelStmt label; 
+	public string label; 
+	public this (LabelStmt label){
+		this.label = label.name;
+	}
+	public override string toString() const{
+		return "GotoStmt : " ~ label;
+	}
 }
 class ApplyStmt : Stmt{ 
 	public Var dest,target;
@@ -240,9 +268,11 @@ class ApplyStmt : Stmt{
 }
 class ReturnStmt : Stmt{ 
 	public Var var;
-	public this (SCTree t){}
+	public this (Var var){
+		this.var = var;
+	}
 	public override string toString () const {
-		return "returnStmt";
+		return "ReturnStmt : " ~ var.toString();
 	}
 }
 class PrintStmt : Stmt{
@@ -252,10 +282,14 @@ class LabelStmt : Stmt{
 	public string name;
 	static int tempIndex = 0;
 	this(string name){this.name = name;}
+	public override string toString () const {
+		return "LabelStmt : " ~ name;
+	}
 	public static LabelStmt temp(){
 		tempIndex ++;
 		return new LabelStmt("#label" ~ tempIndex.to!string);
 	}
+	public static void init(){tempIndex = 0;}
 }
 class Expr{
 	public this(){}
@@ -286,12 +320,8 @@ class AopExpr : Expr{ // + - * /
 		this.R = R;
 	}
 	public override string toString () const {
-		return "AopExpr " ~ L.toString() ~ " " ~ Op ~ " " ~ R.toString() ;
+		return "AopExpr " ~ L.toString() ~ " \"" ~ Op ~ "\" " ~ R.toString() ;
 	}
-}
-class RopExpr : Expr{
-	public string Op;
-	public Expr L,R;
 }
 class AddrExpr : Expr{ //&a
 	public Var var;
