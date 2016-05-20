@@ -2,6 +2,7 @@ module smallc.scintermediate;
 import pegged.grammar;
 import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv;
 import smallc.scdef,smallc.sctrim,smallc.scsemanticanalysis;
+import smallc.scmips;
 
 private enum EType {Int,Intptr,Intptrptr,Void,Offset}
 private struct Var {
@@ -189,10 +190,10 @@ private class Fun_def{
 	public string[] toMips(){
 		if (var.name == "print") return null;
 		auto res = [var.name ~ ":"];
-		res ~= "addiu $sp,$sp," ~ maxOffset.to!string;
+		res ~= Mips.addiu(R.sp,R.sp,maxOffset);
 		res ~= cmpdStmt.toMips();
-		res ~= "addiu $sp,$sp," ~ (-maxOffset).to!string;
-		res ~= "jr $ra";
+		res ~= Mips.addiu(R.sp,R.sp,-maxOffset);
+		res ~= Mips.jr(R.ra);
 		return res;
 	}
 
@@ -438,17 +439,11 @@ private class AssignStmt : Stmt{
 		var.searchToOffset();
 		expr.toOffset();
 	}	
-	//"li $t0,5",
-	//"sw $t0, 4($sp)",
-	//"lw $t1, 4($sp)",
-
 	public override string[] toMips(){
-		//とりあえずt0
-		//off:-4 = Lit:0
-		string offset = var.getReversedOffset().to!string;
+		auto offset = var.getReversedOffset();		
 		string[] res;
 		res ~= expr.toMips();
-		res ~= "sw $t0, "~offset~"($sp)";
+		res ~= Mips.sw(R.t0,offset,R.sp);
 		return res;
 	}
 }
@@ -548,8 +543,8 @@ private class PrintStmt : Stmt{
 	}
 	public override string[] toMips(){
 		return [
-			"move $a0,$t0",
-			"li $v0,1",
+			Mips.move(R.a0,R.t0),
+			Mips.li(R.v0,1),
 			"syscall",
 		];
 	}
@@ -563,17 +558,19 @@ private class LabelStmt : Stmt{
 	}
 	public static LabelStmt temp(){
 		tempIndex ++;
-		return new LabelStmt("#label" ~ tempIndex.to!string);
+		return new LabelStmt("LABEL" ~ tempIndex.to!string);
 	}
 	public static void init(){tempIndex = 0;}
+	public override string[] toMips(){
+		return [ name ~ ":"];
+	}
 }
+//$t0 に値を格納してみる
 private class Expr{
 	public this(){}
 	public void toOffset(){}
 	public string[] toMips(){return null;}
-	public override string toString () const {
-		return "Expr";
-	}
+	public override string toString () const { return null;}
 }
 private class VarExpr : Expr{
 	public Var var;
@@ -584,6 +581,9 @@ private class VarExpr : Expr{
 	public override void toOffset() {
 		var.searchToOffset();
 	}
+	public override string[] toMips(){
+		return [Mips.lw(R.t0,var.getReversedOffset(),R.sp)];
+	}
 }
 private class LitExpr : Expr{
 	public int num;
@@ -592,7 +592,7 @@ private class LitExpr : Expr{
 		return "LitExpr " ~ num.to!string;
 	}
 	public override string[] toMips(){
-		return ["li $t0,"~ num.to!string];
+		return [Mips.li(R.t0,num)];
 	}
 }
 private class AopExpr : Expr{ // + - * /
@@ -610,6 +610,7 @@ private class AopExpr : Expr{ // + - * /
 		L.searchToOffset();
 		R.searchToOffset();
 	}
+	//public override string[] toMips(){	}
 }
 private class AddrExpr : Expr{ //&(a)
 	public Var var;
