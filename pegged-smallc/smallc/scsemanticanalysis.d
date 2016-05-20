@@ -60,7 +60,7 @@ private bool addVar(ref SCType[string][] env,string id,SCType type,string info =
 		}else return false;
 	}
 	env.last[id] = type;
-	env.writeln;
+	//env.writeln;
 	return true;
 }
 private SCType op1(SCType t1,string[][] prods ...){

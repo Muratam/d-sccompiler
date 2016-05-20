@@ -3,13 +3,13 @@ import pegged.grammar;
 import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv;
 import smallc.scdef,smallc.sctrim,smallc.scsemanticanalysis;
 
-enum EType {Int,Intptr,Intptrptr,Void}
-
-struct Var {
+private enum EType {Int,Intptr,Intptrptr,Void,Offset}
+private struct Var {
 	string name;
 	EType type;
 	int level;
 	int arrayNum = 0;
+	bool isArray(){return arrayNum > 0;}
 	static Var make(SCTree t,int level){
 		auto id = t.searchByTag("ID");
 		auto type = new SCType( t.searchByTag("Type_info"));
@@ -25,15 +25,45 @@ struct Var {
 	public string toString() const {
 		return "("
 			~ name ~ ":"
-			~ type.to!string ~ ","
-			~ level.to!string
+			~ type.to!string 
+			~ (type == EType.Offset ? "": "," ~ level.to!string)
 			~ (arrayNum > 0 ?",[" ~ arrayNum.to!string ~ "]": "") ~ ")";
 	}
+
+	static int fp = 0;
+	struct OffsetLevel {int offset,level;};
+	static OffsetLevel[][string] fpNameTable;
+	public static void initFp(){
+		fp = 0;
+		fpNameTable.clear();
+	}
+	public void toOffset(){
+		fpNameTable[name] ~= OffsetLevel(fp,level);		
+		name = "$" ~ fp.to!string;
+		type = EType.Offset;
+		if(! isArray()) fp -= 4;
+		else fp -= 4 * arrayNum;
+		Fun_def.MaxOffset = Fun_def.MaxOffset.min(fp);
+	}
+	public void searchToOffset(){
+		foreach_reverse(var;fpNameTable[name]){
+			if (var.level == level){
+				name = "$" ~ var.offset.to!string;
+				type = EType.Offset;
+				return;
+			}
+		}
+	}
+	public int getReversedOffset(){
+		assert(name.startsWith("$"));
+		return -1 * name[1..$].to!int;
+	}
+
 }
 
 class Global{
-	public Var_def[] var_defs = [];
-	public Fun_def[] fun_defs = [];
+	Var_def[] var_defs = [];
+	Fun_def[] fun_defs = [];
 	public this (SCTree t){
 		Var_def.init();
 		Fun_def.init();
@@ -60,13 +90,39 @@ class Global{
 			res ~= fun_defs.map!"a.toString()".fold!`a~"\n"~b`;
 		return  res ;
 	}
+	public void toOffset(){
+		foreach (ref fun_def;fun_defs){
+			Var.initFp();
+			fun_def.toOffset();
+		}
+		offseted = true;
+	}
+	bool offseted = false;
+	string[] toMips(){
+		auto res = [".text",".globl main"];
+		foreach(fun_def;fun_defs){
+			res ~= fun_def.toMips();
+		}
+		return res;
+	}
+	public string toMipsCode(){
+		if(!offseted) return "call toOffset first !!! \n";		
+		auto mipsCode = toMips();
+		auto res = "";
+		foreach(m;mipsCode){
+			if (m[$-1] == ':') res ~= m;
+			else res ~= "  " ~ m;
+			res ~= "\n";
+		}
+		return res;
+	}
 }
-class Var_def {
+private class Var_def {
 	public Var var;
 	static int tempIndex = 0; 
 	public this(Var var){
 		this.var = var;
-		varList ~= var;
+		varList ~= this.var;
 	}
 	static Var_def temp(EType type,int level){
 		tempIndex ++;			
@@ -89,10 +145,13 @@ class Var_def {
 		varList = [];
 	}
 }
-class Fun_def{
+private class Fun_def{
 	public Var var;
 	public Var[] params = [];
 	public CmpdStmt cmpdStmt;
+
+	public static int MaxOffset = 0;
+	private int maxOffset = 0;
 	public this (SCTree t){
 		assert (t.tag == "Fun_def");
 		auto declare = t.searchByTag("Fun_declare");
@@ -122,8 +181,23 @@ class Fun_def{
 	public static void init(){
 		funlist = [];
 	}
+	public void toOffset(){
+		MaxOffset = 0;
+		cmpdStmt.toOffset();	
+		this.maxOffset = MaxOffset;
+	}
+	public string[] toMips(){
+		if (var.name == "print") return null;
+		auto res = [var.name ~ ":"];
+		res ~= "addiu $sp,$sp," ~ maxOffset.to!string;
+		res ~= cmpdStmt.toMips();
+		res ~= "addiu $sp,$sp," ~ (-maxOffset).to!string;
+		res ~= "jr $ra";
+		return res;
+	}
+
 }
-class CmpdStmt : Stmt{
+private class CmpdStmt : Stmt{
 	public Var_def[] vars;
 	public Stmt[] stmts;
 	public int level;
@@ -335,14 +409,22 @@ class CmpdStmt : Stmt{
 			res ~= stmts.map!(a=>"\n" ~ tab ~ a.toString()).fold!"a~b";
 		return res ;
 	}
-}
-class Stmt {
-	public this(){}
-	public override string toString () const {
-		return "Stmt";
+	public override void toOffset(){
+		foreach(ref v;vars) v.var.toOffset();
+		foreach(ref s;stmts) s.toOffset();				
+	}
+	public override string[] toMips(){
+		string[] res;
+		foreach(stmt;stmts) res ~= stmt.toMips();
+		return res;
 	}
 }
-class AssignStmt : Stmt{ 
+private class Stmt {
+	public void toOffset(){}
+	public string[] toMips(){return null;}
+	public override string toString() const{return null;}
+}
+private class AssignStmt : Stmt{ 
 	public Var var;
 	public Expr expr;
 	public this(Var var,Expr expr){
@@ -352,9 +434,25 @@ class AssignStmt : Stmt{
 	public override string toString () const {
 		return "AssignStmt : " ~ var.toString() ~ " <" ~ expr.toString() ~ ">";
 	}
+	public override void toOffset() {
+		var.searchToOffset();
+		expr.toOffset();
+	}	
+	//"li $t0,5",
+	//"sw $t0, 4($sp)",
+	//"lw $t1, 4($sp)",
+
+	public override string[] toMips(){
+		//とりあえずt0
+		//off:-4 = Lit:0
+		string offset = var.getReversedOffset().to!string;
+		string[] res;
+		res ~= expr.toMips();
+		res ~= "sw $t0, "~offset~"($sp)";
+		return res;
+	}
 }
-// *(a + 3) = b ; a:intptr ,b:int ; a:intptrtpr ,b:intptr 
-class WriteMemStmt : Stmt{
+private class WriteMemStmt : Stmt{
 	public Var dest,src;
 	public this(Var dest,Var src){
 		this.dest = dest;
@@ -363,9 +461,12 @@ class WriteMemStmt : Stmt{
 	public override string toString() const {
 		return "WriteMemStmt :" ~  dest.toString() ~ " <- " ~ src.toString();
 	}
+	public override void toOffset() {
+		dest.searchToOffset();
+		src.searchToOffset();
+	}
 }
-// b = *(a + 3); 
-class ReadMemStmt : Stmt{ 
+private class ReadMemStmt : Stmt{ 
 	public Var dest,src;
 	public this(Var dest,Var src){
 		this.dest = dest;
@@ -374,8 +475,12 @@ class ReadMemStmt : Stmt{
 	public override string toString() const {
 		return "ReadMemStmt :" ~  dest.toString() ~ " <- " ~ src.toString();
 	}
+	public override void toOffset() {
+		dest.searchToOffset();
+		src.searchToOffset();
+	}
 }
-class IfStmt : Stmt{
+private class IfStmt : Stmt{
 	public Var var;
 	public GotoStmt tlabel,flabel;
 	public this (Var var,GotoStmt tlabel,GotoStmt flabel){
@@ -386,8 +491,11 @@ class IfStmt : Stmt{
 	public override string toString() const {
 		return "IfStmt : " ~ var.toString() ~"["~ tlabel.toString() ~ "," ~ flabel.toString()~"]";
 	}
+	public override void toOffset() {
+		var.searchToOffset();
+	}
 }
-class GotoStmt : Stmt{ 
+private class GotoStmt : Stmt{ 
 	public string label; 
 	public this (LabelStmt label){
 		this.label = label.name;
@@ -396,7 +504,7 @@ class GotoStmt : Stmt{
 		return "GotoStmt : " ~ label;
 	}
 }
-class ApplyStmt : Stmt{ 
+private class ApplyStmt : Stmt{ 
 	public Var dest,target;
 	public Var[] args;
 	public this (Var dest,Var target,Var[] args){
@@ -412,8 +520,12 @@ class ApplyStmt : Stmt{
 			~ dest.toString() ~ " = "
 			~ target.toString() ~ "(" ~ argstring ~ ")"	;
 	}
+	public override void toOffset() {
+		dest.searchToOffset();
+		foreach(arg;args) arg.searchToOffset();
+	}
 }
-class ReturnStmt : Stmt{ 
+private class ReturnStmt : Stmt{ 
 	public Var var;
 	public this (Var var){
 		this.var = var;
@@ -421,15 +533,28 @@ class ReturnStmt : Stmt{
 	public override string toString () const {
 		return "ReturnStmt : " ~ var.toString();
 	}
+	public override void toOffset() {
+		var.searchToOffset();
+	}
 }
-class PrintStmt : Stmt{
+private class PrintStmt : Stmt{
 	public Var var;
 	public this (Var var){this.var = var;}
 	public override string toString() const {
 		return "PrintStmt : " ~ var.toString();
 	}
+	public override void toOffset() {
+		var.searchToOffset();
+	}
+	public override string[] toMips(){
+		return [
+			"move $a0,$t0",
+			"li $v0,1",
+			"syscall",
+		];
+	}
 }
-class LabelStmt : Stmt{
+private class LabelStmt : Stmt{
 	public string name;
 	static int tempIndex = 0;
 	this(string name){this.name = name;}
@@ -442,29 +567,35 @@ class LabelStmt : Stmt{
 	}
 	public static void init(){tempIndex = 0;}
 }
-
-
-class Expr{
+private class Expr{
 	public this(){}
+	public void toOffset(){}
+	public string[] toMips(){return null;}
 	public override string toString () const {
 		return "Expr";
 	}
 }
-class VarExpr : Expr{
+private class VarExpr : Expr{
 	public Var var;
 	public this(Var var){this.var = var;}
 	public override string toString () const {
 		return "VarExpr " ~ var.toString();
 	}
+	public override void toOffset() {
+		var.searchToOffset();
+	}
 }
-class LitExpr : Expr{
+private class LitExpr : Expr{
 	public int num;
 	public this (int num){this.num = num;}
 	public override string toString () const {
 		return "LitExpr " ~ num.to!string;
 	}
+	public override string[] toMips(){
+		return ["li $t0,"~ num.to!string];
+	}
 }
-class AopExpr : Expr{ // + - * /
+private class AopExpr : Expr{ // + - * /
 	public string Op;
 	public Var L,R;
 	public this (string Op,Var L,Var R){
@@ -475,13 +606,20 @@ class AopExpr : Expr{ // + - * /
 	public override string toString () const {
 		return "AopExpr " ~ L.toString() ~ " \"" ~ Op ~ "\" " ~ R.toString() ;
 	}
+	public override void toOffset() {
+		L.searchToOffset();
+		R.searchToOffset();
+	}
 }
-class AddrExpr : Expr{ //&(a)
+private class AddrExpr : Expr{ //&(a)
 	public Var var;
 	public this(Var var){
 		this.var = var;
 	}
 	public override string toString() const {
 		return "AddrExpr " ~ var.toString() ;
+	}
+	public override void toOffset() {
+		var.searchToOffset();
 	}
 }

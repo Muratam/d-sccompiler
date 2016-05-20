@@ -220,6 +220,7 @@
    <File path="smallc\sc.d" />
    <File path="smallc\scdef.d" />
    <File path="smallc\scintermediate.d" />
+   <File path="smallc\scmips.d" />
    <File path="smallc\scsemanticanalysis.d" />
    <File path="smallc\sctrim.d" />
   </Folder>

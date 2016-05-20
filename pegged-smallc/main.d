@@ -1,7 +1,8 @@
 import pegged.grammar;
 import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv,std.file;
-import smallc.scdef,smallc.sctrim,smallc.scsemanticanalysis,smallc.scintermediate;
-
+import smallc.scdef,smallc.sctrim;
+import smallc.scsemanticanalysis,smallc.scintermediate;
+import smallc.scmips;
 static if (!makeModule){
 	import smallc.sc;
 
@@ -17,13 +18,18 @@ static if (!makeModule){
 			"reserved Error".writeln;
 			return;
 		}
-		g.writeln;
+		//g.writeln;
 		if (!g.semanticAnalyze){
 			"Using Illegal Semantics !!!".writeln;
 			return;
 		}
 		auto glob = new Global(g);
-		glob.writeln;
+		//glob.writeln;
+
+		glob.toOffset();
+		glob.writeln("\n\n\n");
+		glob.toMipsCode().writeln;
+
 	}
 }
 void main(string args[]){
