@@ -73,8 +73,8 @@ struct SCTree {
 		return false;
 	}
 	this (ParseTree p){
-		begin = p.begin;
-		end = p.end;
+		begin = cast(int)p.begin;
+		end = cast(int)p.end;
 		tag = p.name.startsWith("SC.") ? p.name[3..$]:p.name; //remove SC. 
 		if (p.children.length == 0) val = p.matches[0];
 		foreach(c;p.children)hits ~= SCTree(c);

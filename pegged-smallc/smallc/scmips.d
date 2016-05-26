@@ -3,6 +3,9 @@ import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv;
 import smallc.scintermediate;
 import pegged.grammar;
 
+//todo : 3 = 10;
+//todo : int a[3],d[2];a = d;
+
 class MipsTestFuns{
 	string[] mips1(){
 		//print(20);
@@ -64,6 +67,20 @@ class MipsTestFuns{
 		];
 
 	}
+	void test3(){/+
+		int f(int x){
+			while(x > 1)x = x-2;
+			return x;
+		}
+		//sp -=24
+		//sp[1] = ra;sp[0] = fp;
+		//fp = sp + 20
+		//ra = sp[1];fp = sp[0]
+		void main(){int x;print(f(9));}
+	+/}
+
+
+
 	//sp -----増えていく
 	//fp = sp + locals * ra 
 	//gp,sp,fp,ra ? 
@@ -122,20 +139,34 @@ struct MipsTestCase{
 
 }
 
-//微妙
-//  : VarExpr : t0 = sp[?] のみでよい？
-//  : LitExpr : t0 = n のみでよい？
-//  : PrintStmt : print(t0) のみでよい？
-//  : AssignStmt : sp[?] = t0 のみでよい？
+//微妙 :: sp のはグローバルを考慮するべき
+//  : VarExpr : t0 = sp[?] 
+//  : LitExpr : t0 = n 
+//  : AopExpr : t1 = sp[?];t2 = sp[?];t0 = t1 op t2 
+//  : AddrExpr: t0 = sp + Offset 
+//  : PrintStmt : print(t0)
+//  : AssignStmt : sp[?] = t0 
+//  : WriteMemStmt: *a = b
+//  : == ReadMemStmt: a = *b
+//  : IfStmt    : beqz
+//  : GotoStmt  : j
+
+
 //まだ
-//  : WriteMemStmt: ?
-//  : ReadMemStmt: ?
-//  : IfStmt    : ble?
-//  : GotoStmt  : j?
-//  : ApplyStmt : ra fp を退避して？
-//  : ReturnStmt
-//  : AddrExpr: ?
-//  : AopExpr : t1 = sp[?],t2 = sp[?],t0 = t1 * t2 みたいな？
+//t4,s5 とかは 最適化するときに使うのだろう
+//at,zero,k0,k1 は今は使わないだろう
+
+//function : return v0,v1;
+//         : arg(a0,a1,a2,a3)
+//         : ra (return address)
+//gp  :: global
+//fp  :: frame pointer
+
+
+//  : ApplyStmt : a0...a4 (他はあとで)に値をいれて、
+//                jal して 
+//                fp[0] = v0
+//  : ReturnStmt 
 struct R{
 	string name;
 	alias name this;
@@ -156,6 +187,8 @@ struct R{
 }
 
 static struct Mips{
+
+	//Assign/////////////////////////////////////////////////////////
 	//$to = $from
 	static string move(R to,R from){
 		return "move " ~ to ~ "," ~ from;
@@ -164,6 +197,9 @@ static struct Mips{
 	static string li(R var,int num){
 		return "li " ~ var ~ "," ~ num.to!string; 
 	}
+
+
+	///Load Save///////////////////////////////////////////////////////
 	//$pt[num] = $var
 	static string sw(R from,int offset,R ptr){
 		return "sw " ~ from ~ ", "~offset.to!string ~ "("~ptr~")";
@@ -171,12 +207,54 @@ static struct Mips{
 	static string lw(R to,int offset,R ptr){
 		return "lw " ~ to   ~ ", "~offset.to!string ~ "("~ptr~")"; 
 	}
-	//$to = $from + num
-	static string addiu(R to,R from,int num){
-		return "addiu "~ to ~ "," ~ from ~ "," ~ num.to!string; 
-	}
+
+
+
+	//Jump//////////////////////////////////////////////////////////
 	//goto $addr
 	static string jr(R addr){
 		return "jr "~ addr;
 	}
+	//goto label
+	static string j (string label){
+		return "j " ~ label;
+	}
+	//sw $ra ,goto label  
+    static string jal(string label){
+		return "jal " ~ label;
+	}
+	//if (! $R) goto label
+	static string beqz(R notZero,string label){
+		return "beqz " ~ notZero ~ "," ~ label;
+	}
+
+
+	//AOP///////////////////////////////////////////////////////////
+	//$to = $from op num
+	private static string IFormat (string name){
+		return `
+		public static string `~name~` (R to,R from,int num){
+			return "`~name~`" ~ " " ~ to ~ "," ~ from ~ "," ~ num.to!string;
+		}
+		`;
+	}
+	//$to = $from1 op $from2
+	private static string RFormat(string name){
+		return `
+		public static string `~name~` (R to,R from1,R from2){
+			return "`~name~`" ~  " "~ to ~ "," ~ from1 ~ "," ~ from2;
+		}`;
+	}
+	mixin(IFormat("addiu"));
+	mixin(RFormat("add"));
+	mixin(RFormat("sub"));
+	mixin(RFormat("mul"));
+	mixin(RFormat("div"));
+	mixin(RFormat("seq"));
+	mixin(RFormat("sne"));
+	mixin(RFormat("sle"));
+	mixin(RFormat("sge"));
+	mixin(RFormat("sgt"));
+	mixin(RFormat("slt"));
+
 }

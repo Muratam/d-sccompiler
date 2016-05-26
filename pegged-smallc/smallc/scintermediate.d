@@ -30,7 +30,6 @@ private struct Var {
 			~ (type == EType.Offset ? "": "," ~ level.to!string)
 			~ (arrayNum > 0 ?",[" ~ arrayNum.to!string ~ "]": "") ~ ")";
 	}
-
 	static int fp = 0;
 	struct OffsetLevel {int offset,level;};
 	static OffsetLevel[][string] fpNameTable;
@@ -59,7 +58,11 @@ private struct Var {
 		assert(name.startsWith("$"));
 		return -1 * name[1..$].to!int;
 	}
-
+	@property public int ROffset(){return getReversedOffset();} 
+	public string LW(R register){
+		if(isArray()) return Mips.addiu(register,R.sp,ROffset);
+		else return Mips.lw(register,ROffset,R.sp);
+	}
 }
 
 class Global{
@@ -101,6 +104,7 @@ class Global{
 	bool offseted = false;
 	string[] toMips(){
 		auto res = [".text",".globl main"];
+		//ditto : No Var_def !!!!
 		foreach(fun_def;fun_defs){
 			res ~= fun_def.toMips();
 		}
@@ -330,14 +334,12 @@ private class CmpdStmt : Stmt{
 	}
 
 	void addIfStmt(AssignStmt expr,void delegate() tStmt,void delegate()fStmt){
-		auto tlabel = LabelStmt.temp();
-		auto flabel = LabelStmt.temp();
+		auto elseLabel = LabelStmt.temp();
 		auto finlabel = LabelStmt.temp();
-		stmts ~= new IfStmt(expr.var,new GotoStmt(tlabel),new GotoStmt(flabel));
-		stmts ~= tlabel;
+		stmts ~= new IfStmt(expr.var,new GotoStmt(elseLabel));
 		tStmt();
 		stmts ~= new GotoStmt(finlabel);
-		stmts ~= flabel;
+		stmts ~= elseLabel;
 		fStmt();
 		stmts ~= finlabel;
 		return;
@@ -355,18 +357,15 @@ private class CmpdStmt : Stmt{
 			addIfStmt(addExpr(t.hits[1]),{addStmt(t.hits[2]);},{addStmt(t.hits[3]);});
 			return;
 		case "for":
-			//for(1;2;3)a; => 1;while(2){a;3} => 1;L0;if(2 :L1:L2){L1;a;3;goto L0;};L2;
+			//for(1;2;3)a;  =>  1;while(2){a;3}  =>  1;L0;if(2:L2){a;3;goto L0;};L2;
 			auto loopProdLabel = LabelStmt.temp();
-			auto whileMainLabel = LabelStmt.temp();
 			auto loopfinishLabel = LabelStmt.temp();
 			auto var1 = addExpr(t.hits[1]);
 			stmts ~= loopProdLabel;
 			auto var2 = addExpr(t.hits[2]);
 			stmts ~= new IfStmt(
 					 var2.var
-					,new GotoStmt(whileMainLabel)
 					,new GotoStmt(loopfinishLabel));
-			stmts ~= whileMainLabel;
 			addStmt(t.hits[4]);
 			auto var3 = addExpr(t.hits[3]);
 			stmts ~= new GotoStmt(loopProdLabel);
@@ -414,6 +413,7 @@ private class CmpdStmt : Stmt{
 		foreach(ref v;vars) v.var.toOffset();
 		foreach(ref s;stmts) s.toOffset();				
 	}
+
 	public override string[] toMips(){
 		string[] res;
 		foreach(stmt;stmts) res ~= stmt.toMips();
@@ -422,7 +422,7 @@ private class CmpdStmt : Stmt{
 }
 private class Stmt {
 	public void toOffset(){}
-	public string[] toMips(){return null;}
+	public string[] toMips(){return ["No Stmt"];}
 	public override string toString() const{return null;}
 }
 private class AssignStmt : Stmt{ 
@@ -440,13 +440,12 @@ private class AssignStmt : Stmt{
 		expr.toOffset();
 	}	
 	public override string[] toMips(){
-		auto offset = var.getReversedOffset();		
-		string[] res;
-		res ~= expr.toMips();
-		res ~= Mips.sw(R.t0,offset,R.sp);
-		return res;
+		return expr.toMips() ~ [
+			Mips.sw(R.t0,var.ROffset,R.sp)
+		];
 	}
 }
+//*pa = 12;
 private class WriteMemStmt : Stmt{
 	public Var dest,src;
 	public this(Var dest,Var src){
@@ -460,7 +459,15 @@ private class WriteMemStmt : Stmt{
 		dest.searchToOffset();
 		src.searchToOffset();
 	}
+	public override string[] toMips(){
+		return [
+			src.LW(R.t0),
+			dest.LW(R.t1),
+			Mips.sw(R.t0,0,R.t1),
+		];
+	}
 }
+//pa = &a;
 private class ReadMemStmt : Stmt{ 
 	public Var dest,src;
 	public this(Var dest,Var src){
@@ -474,20 +481,32 @@ private class ReadMemStmt : Stmt{
 		dest.searchToOffset();
 		src.searchToOffset();
 	}
+	public override string[] toMips(){
+		return [
+			src.LW(R.t0),
+			Mips.lw(R.t0,0,R.t0),
+			Mips.sw(R.t0,dest.ROffset,R.sp)
+		];
+	}
 }
 private class IfStmt : Stmt{
 	public Var var;
-	public GotoStmt tlabel,flabel;
-	public this (Var var,GotoStmt tlabel,GotoStmt flabel){
+	public GotoStmt elseLabel;
+	public this (Var var,GotoStmt elseLabel){
 		this.var = var;
-		this.tlabel = tlabel;
-		this.flabel = flabel;			
+		this.elseLabel = elseLabel;			
 	}
 	public override string toString() const {
-		return "IfStmt : " ~ var.toString() ~"["~ tlabel.toString() ~ "," ~ flabel.toString()~"]";
+		return "IfStmt : " ~ var.toString() ~"[" ~ elseLabel.toString()~"]";
 	}
 	public override void toOffset() {
 		var.searchToOffset();
+	}
+	public override string[] toMips(){
+		return [
+			var.LW(R.t0),
+			Mips.beqz(R.t0,elseLabel.label)
+		];
 	}
 }
 private class GotoStmt : Stmt{ 
@@ -497,6 +516,9 @@ private class GotoStmt : Stmt{
 	}
 	public override string toString() const{
 		return "GotoStmt : " ~ label;
+	}
+	public override string[] toMips(){
+		return [Mips.j(label)];
 	}
 }
 private class ApplyStmt : Stmt{ 
@@ -569,11 +591,11 @@ private class LabelStmt : Stmt{
 private class Expr{
 	public this(){}
 	public void toOffset(){}
-	public string[] toMips(){return null;}
+	public string[] toMips(){return ["No Expr"];}
 	public override string toString () const { return null;}
 }
 private class VarExpr : Expr{
-	public Var var;
+	Var var;
 	public this(Var var){this.var = var;}
 	public override string toString () const {
 		return "VarExpr " ~ var.toString();
@@ -581,12 +603,12 @@ private class VarExpr : Expr{
 	public override void toOffset() {
 		var.searchToOffset();
 	}
-	public override string[] toMips(){
-		return [Mips.lw(R.t0,var.getReversedOffset(),R.sp)];
+	public override string[] toMips(){		
+		return [var.LW(R.t0)];		
 	}
 }
 private class LitExpr : Expr{
-	public int num;
+	int num;
 	public this (int num){this.num = num;}
 	public override string toString () const {
 		return "LitExpr " ~ num.to!string;
@@ -596,24 +618,41 @@ private class LitExpr : Expr{
 	}
 }
 private class AopExpr : Expr{ // + - * /
-	public string Op;
-	public Var L,R;
-	public this (string Op,Var L,Var R){
+	string Op;
+	Var Left,Right;
+	public this (string Op,Var Left,Var Right){
 		this.Op = Op;
-		this.L = L;
-		this.R = R;
+		this.Left = Left;
+		this.Right = Right;
 	}
 	public override string toString () const {
-		return "AopExpr " ~ L.toString() ~ " \"" ~ Op ~ "\" " ~ R.toString() ;
+		return "AopExpr " ~ Left.toString() ~ " \"" ~ Op ~ "\" " ~ Right.toString() ;
 	}
 	public override void toOffset() {
-		L.searchToOffset();
-		R.searchToOffset();
+		Left.searchToOffset();
+		Right.searchToOffset();
 	}
-	//public override string[] toMips(){	}
+	public override string[] toMips(){
+		string[] res = [
+			Left.LW(R.t1) ,
+			Right.LW(R.t2) 
+		];
+		final switch(Op){
+			case "+": return res ~ Mips.add(R.t0,R.t1,R.t2);			
+			case "-": return res ~ Mips.sub(R.t0,R.t1,R.t2);
+			case "*": return res ~ Mips.mul(R.t0,R.t1,R.t2);
+			case "/": return res ~ Mips.div(R.t0,R.t1,R.t2);
+			case "==":return res ~ Mips.seq(R.t0,R.t1,R.t2);
+			case "!=":return res ~ Mips.sne(R.t0,R.t1,R.t2);
+			case "<=":return res ~ Mips.sle(R.t0,R.t1,R.t2);
+			case ">=":return res ~ Mips.sge(R.t0,R.t1,R.t2);
+			case ">" :return res ~ Mips.sgt(R.t0,R.t1,R.t2);
+			case "<" :return res ~ Mips.slt(R.t0,R.t1,R.t2);
+		}
+	}
 }
 private class AddrExpr : Expr{ //&(a)
-	public Var var;
+	Var var;
 	public this(Var var){
 		this.var = var;
 	}
@@ -622,5 +661,10 @@ private class AddrExpr : Expr{ //&(a)
 	}
 	public override void toOffset() {
 		var.searchToOffset();
+	}
+	public override string[] toMips(){
+		return [
+			Mips.addiu(R.t0,R.sp,var.ROffset)
+		];
 	}
 }
