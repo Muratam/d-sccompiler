@@ -289,7 +289,6 @@ private class CmpdStmt : Stmt{
 					});
 				});
 				return new AssignStmt(temp.var,new VarExpr(temp.var));
-				break;
 			case "&&":
 				auto temp = Var_def.temp(EType.Int,this.level);
 				vars ~= temp;
@@ -305,7 +304,6 @@ private class CmpdStmt : Stmt{
 					stmts ~= new AssignStmt(temp.var,new LitExpr(0));
 				});
 				return new AssignStmt(temp.var,new VarExpr(temp.var));
-				break;
 			default :break;
 			}
 			auto added1 = addExpr(t.hits[0]);
@@ -321,6 +319,7 @@ private class CmpdStmt : Stmt{
 					auto mul4 = makeTemp(EType.Int,new AopExpr("*",num4.var,num.var)); 
 					return makeTemp(ptr.var.type,new AopExpr(op,ptr.var,mul4.var));
 				}
+				goto case;
 			case "*":case "/":
 				return makeTemp(EType.Int, new AopExpr(op,added1.var,added2.var));
 			case "==":case "!=":case "<":case ">":case "<=":case ">=":

@@ -9,6 +9,7 @@ static if (!makeModule){
 	void analyze(string code){	
 		const printproto = "void print(int i){}";
 		ParseTree p = SC(printproto ~ code);
+
 		if (!p.successful) {
 			"Parse Error !!\n\n".writeln;
 			return;
@@ -25,14 +26,14 @@ static if (!makeModule){
 		}
 		auto glob = new Global(g);
 		//glob.writeln;
-
+		
 		glob.toOffset();
 		glob.writeln("\n\n\n");
 		glob.toMipsCode().writeln;
 
 	}
 }
-void main(string args[]){
+void main(string[] args){
 	static if (makeModule) asModule("smallc.sc","smallc/sc",scdefstr);
 	else {
 		if (args.length > 1) {

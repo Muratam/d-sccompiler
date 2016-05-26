@@ -242,6 +242,7 @@ private void trimHits2(ref SCTree t){
 					newHits ~= h.hits[1].hits[1];
 					break;
 			}
+			goto default;
 		default: 
 			newHits ~= h;
 			break;
