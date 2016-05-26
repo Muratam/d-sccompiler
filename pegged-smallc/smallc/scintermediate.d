@@ -565,7 +565,7 @@ private class PrintStmt : Stmt{
 	}
 	public override string[] toMips(){
 		return [
-			Mips.move(R.a0,R.t0),
+			Mips.lw(R.a0,var.ROffset,R.sp),
 			Mips.li(R.v0,1),
 			"syscall",
 		];

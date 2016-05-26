@@ -7,7 +7,7 @@ main:
   lw $t0, 4($sp)
   sw $t0, 0($sp)
 LABEL1:
-  li $t0,100
+  li $t0,10
   sw $t0, 8($sp)
   lw $t1, 0($sp)
   lw $t2, 8($sp)
@@ -15,7 +15,7 @@ LABEL1:
   sw $t0, 12($sp)
   lw $t0, 12($sp)
   beqz $t0,LABEL2
-  move $a0,$t0
+  lw $a0, 0($sp)
   li $v0,1
   syscall
   li $t0,1
