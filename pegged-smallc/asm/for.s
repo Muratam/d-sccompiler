@@ -7,7 +7,7 @@ main:
   lw $t0, 4($sp)
   sw $t0, 0($sp)
 LABEL1:
-  li $t0,10
+  li $t0,100000
   sw $t0, 8($sp)
   lw $t1, 0($sp)
   lw $t2, 8($sp)

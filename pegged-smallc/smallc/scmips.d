@@ -79,15 +79,12 @@ class MipsTestFuns{
 		void main(){int x;print(f(9));}
 	+/}
 
-
-
 	//sp -----増えていく
 	//fp = sp + locals * ra 
 	//gp,sp,fp,ra ? 
 	//temp   : t0..t9 t100 ?
 	//params : a0..a3 a100 ?  
 	//return : v0..v1 v100 ?
-
 
 	//
 	//add    : rd rs rt

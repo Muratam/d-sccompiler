@@ -663,7 +663,7 @@ private class AddrExpr : Expr{ //&(a)
 	}
 	public override string[] toMips(){
 		return [
-			Mips.addiu(R.t0,R.sp,var.ROffset)
+			Mips.addiu(R.t0,R.sp,var.ROffset),
 		];
 	}
 }

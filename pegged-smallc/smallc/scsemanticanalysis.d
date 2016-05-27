@@ -11,20 +11,27 @@ class SCType{
 	public SCType[] args = [];	
 	public bool isFunction = false;
 	public bool isProto = false;
-	public this(string type,SCType[] args = [],bool isFunction = false,bool isProto = false){
+	public string info = "";
+	public this(string type,SCType[] args = [],bool isFunction = false,bool isProto = false,string info = ""){
 		this.type = type;
 		this.args = args;
 		this.isFunction = isFunction;
 		this.isProto = isProto;
+		this.info = info;
 	}
 	public this(SCTree t,bool isFunction = false,bool isProto = false){
 		assert(t.tag == "Type_info");
 		this.type = t.searchByTag("Type").val;
 		if (t.canFindByTag("ptr")) type ~= " *";
-		if (t.canFindByTag("array")) type ~= " *";
+		if (t.canFindByTag("array")) {
+			type ~= " *";
+			info = "isArray";
+		}
 		this.isFunction = isFunction;
 		this.isProto = isProto;
 	}
+	public @property bool isArray(){return info == "isArray";}
+	public @property bool isNum(){return info == "isNum";}
 	public override string toString() const {
 		string res = "";
 		if (isProto) res ~= "proto";
@@ -91,9 +98,11 @@ private SCType checkHitsType(ref SCType[string][] env,SCTree[] hits,string whenC
 private SCType checkStmtType(ref SCType[string][] env,SCTree t){
 	if (t.hits.length == 0) return new SCType("void");
 	switch(t.hits[0].val){
-	case "if":
-		return env.checkHitsType(t.hits[1..4]);
-	case "for":
+	case "if": // [if,exp,stmt,stmt]
+		if (env.checkType(t.hits[1]).type != "int") return null;
+		return env.checkHitsType(t.hits[2..4]);
+	case "for"://[for,exp,exp!,exp,stmt]
+		if (env.checkType(t.hits[2]).type != "int") return null;
 		return env.checkHitsType(t.hits[1..5]);
 	case "return":
 		auto returnType = env[0]["#returnType"];
@@ -162,6 +171,8 @@ private SCType checkExprType(ref SCType[string][] env,SCTree t){
 		case ",": 
 			return type2;
 		case "=": 
+			if(type1.isArray) return null; 
+			if(type1.isNum) return null;
 			return type1.sameType(type2) ? type1 : null;
 		}
 	}
@@ -204,7 +215,7 @@ private SCType checkType(ref SCType[string][] env,SCTree t){
 		}
 		return t.writeTypeError(id ~ " was not delcared !! ");
 	case "NUM":	
-		return new SCType("int");
+		return new SCType("int",[],false,false,"isNum");
 	}
 }
 
