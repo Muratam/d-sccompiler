@@ -3,12 +3,19 @@ import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv,std.file;
 import smallc.scdef,smallc.sctrim;
 import smallc.scsemanticanalysis,smallc.scintermediate;
 import smallc.scmips;
+
+
+//sample ng1
+//basic gcd global 
+//err shape02:isNum=>isIDで代入文 type09 type10
+//advance bubble insert ret_ptr:prototype宣言
+//
 static if (!makeModule){
 	import smallc.sc;
 
 	void analyze(string code){	
-		code.writeln;
-		const printproto = "";//"void print(int i){}";
+		//("# " ~ code).writeln;
+		const printproto = "void print(int i){}";
 		ParseTree p = SC(printproto ~ code);
 		//p.writeln;
 		if (!p.successful) {
@@ -26,20 +33,17 @@ static if (!makeModule){
 			return;
 		}
 		auto glob = new Global(g);
-		glob.writeln;
-		
-		//glob.toOffset();
-		//glob.writeln("\n\n\n");
-		//glob.toMipsCode().writeln;
+		//glob.writeln;
+		glob.toOffset();
+		glob.toMipsCode().writeln;
 
 	}
 }
 void main(string[] args){
 	static if (makeModule) asModule("smallc.sc","smallc/sc",scdefstr);
 	else {
-		sandbox();
 		if (args.length > 1) {
-			writeln("analyze " ~ args[1]);
+			writeln("#analyze " ~ args[1]);
 			analyze(readText(args[1]));
 			return ;
 		}
@@ -48,17 +52,50 @@ void main(string[] args){
 }
 
 unittest{
-	analyze("int main(){int a,b;a = b;}");
-	analyze("int main(){int *a,*b;a = b;}");
-	analyze("int main(){int *a,b[3];a = b;}");
-	analyze("int main(){int a[2],*b;a = b;}");
-	analyze("int main(){int a;a = 3;}");
-	analyze("int main(){int a;3 = a;}");
-	//analyze("int main(){int a;if(a);}");
-	//analyze("int main(){int *a;if(a);}");
+	[
+		//"int main(){print(111);print(444);}",
+		//"int d(){}int main(){print(111);d();print(444);}",
+		//"int d(){print(112);}int main(){d();d();d();d();}",
+		//"int d(){print(112);}int main(){int i;for(i=0;i<10;i = i+1)d();}",
+		//"int d(){print(112);}int main(){int i;for(i=0;i<10;i = i+1){print(i);d();}}",
+		//"int d(){if(0)return 72;return 11;}int main(){print(d());}",
+		//"int d(int n){return n;}int main(){print(d(12));}",
+		//"int sum(int a,int b,int c,int d){return a+b+c+d; } int main(){print(sum(1,2,3,4));}"
+		//"int fa(int n){	if(n == 0)return 1;else return n * fa(n-1);}int main(){ print(fa(4));}"
+		//"int a;int main(){a = 72;print(a);}",
+	].each!analyze;
+	"".writeln;
 }
 
 void sandbox(){
+	mixin(`
+	def SUM(a,b): a + b
+	`
+		.replace("def","auto")
+		.replace("SUM","SUM(T1,T2)")
+		.replace("(a,b)","(T1 a,T2 b)")
+		.replace(": a + b","{return a + b;}")
+	);
+	int a = SUM(0,10);
+	/+
+	mixin(d-py(`
+	def sum (a,b):
+		c = a + b
+		c = c + 0
+		c
+	def fact(n):
+		if n == 0 : return 1
+		return n * n - 1	
+	));
+	auto sum(T1,T2)(T1 a,T2 b):
+		auto c = a + b;
+		c = c + 0;
+		return c;
+	auto fact(T1)(T1 n):
+		if (n == 0) {return 1;}
+		return n * n - 1
+	+/
+
 	/+
 	class Tree{}
 	class Leaf:Tree{int a;}

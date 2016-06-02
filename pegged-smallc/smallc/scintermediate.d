@@ -4,14 +4,16 @@ import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv;
 import smallc.scdef,smallc.sctrim,smallc.scsemanticanalysis;
 import smallc.scmips;
 
+
 private enum EType {Int,Intptr,Intptrptr,Void,Offset}
 private struct Var {
 	string name;
 	EType type;
 	int level;
 	int arrayNum = 0;
+	R ptr = R.sp;
 	bool isArray(){return arrayNum > 0;}
-	static Var make(SCTree t,int level){
+	static Var make(SCTree t,int level,R ptr = R.sp){
 		auto id = t.searchByTag("ID");
 		auto type = new SCType( t.searchByTag("Type_info"));
 		EType res = EType.Int;
@@ -21,32 +23,52 @@ private struct Var {
 		int arrayNum = 0;
 		if (t.canFindByTag("array"))
 			arrayNum = t.searchByTag("array").val.to!int;
-		return Var(id.val,res,level,arrayNum);
+		return Var(id.val,res,level,arrayNum,ptr);
 	}
 	public string toString() const {
 		return "("
 			~ name ~ ":"
+			~ (ptr == R.sp ? "": ptr == R.fp ? "fp:":ptr == R.gp ? "gp:" : "!?")
 			~ type.to!string 
-			~ (type == EType.Offset ? "": "," ~ level.to!string)
+			~ (type == EType.Offset ? "": "," ~ level.to!string)			
 			~ (arrayNum > 0 ?",[" ~ arrayNum.to!string ~ "]": "") ~ ")";
 	}
-	static int fp = 0;
+	public  static int MaxOffset = 0;
+	private static int ofs = 0;
+	private static int gpofs = 0;
 	struct OffsetLevel {int offset,level;};
-	static OffsetLevel[][string] fpNameTable;
-	public static void initFp(){
-		fp = 0;
-		fpNameTable.clear();
+	static OffsetLevel[][string] ofsNameTable;
+	static OffsetLevel[string] gpNameTable;
+	//["a":[(),(),()]]
+	public static void initOfs(int startOffset = 0,bool clearOfsNameTable = true,bool clearGpNameTable = true){
+		MaxOffset = ofs = startOffset;
+		if (clearOfsNameTable) ofsNameTable.clear();
+		if (clearGpNameTable) gpNameTable.clear();
 	}
 	public void toOffset(){
-		fpNameTable[name] ~= OffsetLevel(fp,level);		
-		name = "$" ~ fp.to!string;
-		type = EType.Offset;
-		if(! isArray()) fp -= 4;
-		else fp -= 4 * arrayNum;
-		Fun_def.MaxOffset = Fun_def.MaxOffset.min(fp);
+		if (ptr == R.gp){
+			gpNameTable[name] = OffsetLevel(gpofs,level);
+			name = "$" ~ gpofs.to!string;
+			type = EType.Offset;
+			if(! isArray()) gpofs += 4;
+			else gpofs += 4 * arrayNum;
+		}else{
+			ofsNameTable[name] ~= OffsetLevel(ofs,level);		
+			name = "$" ~ ofs.to!string;
+			type = EType.Offset;
+			if(! isArray()) ofs += 4;
+			else ofs += 4 * arrayNum;
+			MaxOffset = MaxOffset.max(ofs);
+		}
 	}
 	public void searchToOffset(){
-		foreach_reverse(var;fpNameTable[name]){
+		if(name !in ofsNameTable){
+			//search gp
+			name = "$" ~ gpNameTable[name].offset.to!string;
+			type = EType.Offset;
+			return;
+		}
+		foreach_reverse(var;ofsNameTable[name]){
 			if (var.level == level){
 				name = "$" ~ var.offset.to!string;
 				type = EType.Offset;
@@ -54,14 +76,16 @@ private struct Var {
 			}
 		}
 	}
-	public int getReversedOffset(){
+	@property public int ROffset(){
 		assert(name.startsWith("$"));
-		return -1 * name[1..$].to!int;
+		return name[1..$].to!int;
+	} 
+	public string LW(R to){
+		if(isArray()) return Mips.addiu(to,ptr,ROffset);
+		else return Mips.lw(to,ROffset,ptr);
 	}
-	@property public int ROffset(){return getReversedOffset();} 
-	public string LW(R register){
-		if(isArray()) return Mips.addiu(register,R.sp,ROffset);
-		else return Mips.lw(register,ROffset,R.sp);
+	public string SW(R from){
+		return Mips.sw(from,ROffset,ptr);
 	}
 }
 
@@ -77,7 +101,7 @@ class Global{
 		foreach(h;t.hits){
 			switch(h.tag){
 			case "Var_def":
-				var_defs ~= new Var_def(Var.make(h,0));	
+				var_defs ~= new Var_def(Var.make(h,0,R.gp));	
 				break;
 			case "Fun_def":
 				fun_defs ~= new Fun_def(h); 
@@ -95,8 +119,11 @@ class Global{
 		return  res ;
 	}
 	public void toOffset(){
+		Var.initOfs(0,true,true);
+		foreach(ref var_def;var_defs){
+			var_def.var.toOffset();
+		}
 		foreach (ref fun_def;fun_defs){
-			Var.initFp();
 			fun_def.toOffset();
 		}
 		offseted = true;
@@ -155,7 +182,6 @@ private class Fun_def{
 	public Var[] params = [];
 	public CmpdStmt cmpdStmt;
 
-	public static int MaxOffset = 0;
 	private int maxOffset = 0;
 	public this (SCTree t){
 		assert (t.tag == "Fun_def");
@@ -163,7 +189,7 @@ private class Fun_def{
 		var = Var.make(declare,0);
 		if(declare.hits.length > 2){
 			foreach(h;declare.hits[2..$]){
-				params ~= (new Var_def(Var.make(h,1))).var;
+				params ~= (new Var_def(Var.make(h,1,R.fp))).var;
 			}
 		}
 		funlist ~= this;
@@ -187,20 +213,19 @@ private class Fun_def{
 		funlist = [];
 	}
 	public void toOffset(){
-		MaxOffset = 0;
+		Var.initOfs(0,true,false);
+		foreach (ref p;params) p.toOffset();
+		Var.initOfs(8,false,false);
 		cmpdStmt.toOffset();	
-		this.maxOffset = MaxOffset;
+		maxOffset = Var.MaxOffset;
 	}
 	public string[] toMips(){
 		if (var.name == "print") return null;
-		auto res = [var.name ~ ":"];
-		res ~= Mips.addiu(R.sp,R.sp,maxOffset);
-		res ~= cmpdStmt.toMips();
-		res ~= Mips.addiu(R.sp,R.sp,-maxOffset);
-		res ~= Mips.jr(R.ra);
-		return res;
+		string[] res = [var.name ~ ":"];
+		return res ~ Mips.startsFunc(maxOffset)
+		    ~ cmpdStmt.toMips()
+			~ Mips.endsFunc;
 	}
-
 }
 private class CmpdStmt : Stmt{
 	public Var_def[] vars;
@@ -440,7 +465,7 @@ private class AssignStmt : Stmt{
 	}	
 	public override string[] toMips(){
 		return expr.toMips() ~ [
-			Mips.sw(R.t0,var.ROffset,R.sp)
+			var.SW(R.t0)
 		];
 	}
 }
@@ -484,7 +509,7 @@ private class ReadMemStmt : Stmt{
 		return [
 			src.LW(R.t0),
 			Mips.lw(R.t0,0,R.t0),
-			Mips.sw(R.t0,dest.ROffset,R.sp)
+			dest.SW(R.t0)
 		];
 	}
 }
@@ -521,7 +546,7 @@ private class GotoStmt : Stmt{
 	}
 }
 private class ApplyStmt : Stmt{ 
-	public Var dest,target;
+	public Var dest,target; //dest = target(args...)
 	public Var[] args;
 	public this (Var dest,Var target,Var[] args){
 		this.dest = dest;
@@ -538,7 +563,21 @@ private class ApplyStmt : Stmt{
 	}
 	public override void toOffset() {
 		dest.searchToOffset();
-		foreach(arg;args) arg.searchToOffset();
+		foreach(ref arg;args) arg.searchToOffset();
+	}
+	public override string[] toMips(){
+		string[] res;
+		res ~= 	Mips.addiu(R.t1,R.sp,cast(int)(-4 * args.length));
+		foreach(int i,arg;args){
+			res ~= arg.LW(R.t0);
+			res ~= Mips.sw(R.t0,4 * i,R.t1);
+		}
+		return res ~= [ 
+			Mips.move(R.sp,R.t1),
+			Mips.jal(target.name),
+			Mips.addiu(R.sp,R.sp,cast(int)(4 * args.length)),
+			dest.SW(R.v0),
+		];
 	}
 }
 private class ReturnStmt : Stmt{ 
@@ -552,6 +591,9 @@ private class ReturnStmt : Stmt{
 	public override void toOffset() {
 		var.searchToOffset();
 	}
+	public override string[] toMips(){
+		return var.LW(R.v0) ~ Mips.endsFunc;
+	}
 }
 private class PrintStmt : Stmt{
 	public Var var;
@@ -564,7 +606,7 @@ private class PrintStmt : Stmt{
 	}
 	public override string[] toMips(){
 		return [
-			Mips.lw(R.a0,var.ROffset,R.sp),
+			var.LW(R.a0),
 			Mips.li(R.v0,1),
 			"syscall",
 		];

@@ -32,6 +32,7 @@ class SCType{
 	}
 	public @property bool isArray(){return info == "isArray";}
 	public @property bool isNum(){return info == "isNum";}
+	//public @property bool isId(){return info == "isId";}
 	public override string toString() const {
 		string res = "";
 		if (isProto) res ~= "proto";
