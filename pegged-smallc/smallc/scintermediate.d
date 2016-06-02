@@ -96,9 +96,9 @@ class Global{
 		Var_def.init();
 		Fun_def.init();
 		LabelStmt.init();
-		if (t.tag == "SC")t = t.hits[0];
+		if (t.tag == "SC")t = t[0];
 		assert (t.tag == "Global");
-		foreach(h;t.hits){
+		foreach(h;t){
 			switch(h.tag){
 			case "Var_def":
 				var_defs ~= new Var_def(Var.make(h,0,R.gp));	
@@ -187,13 +187,13 @@ private class Fun_def{
 		assert (t.tag == "Fun_def");
 		auto declare = t.searchByTag("Fun_declare");
 		var = Var.make(declare,0);
-		if(declare.hits.length > 2){
-			foreach(h;declare.hits[2..$]){
+		if(declare.length > 2){
+			foreach(h;declare[2..$]){
 				params ~= (new Var_def(Var.make(h,1,R.fp))).var;
 			}
 		}
 		funlist ~= this;
-		cmpdStmt = new CmpdStmt(t.hits[1],2);
+		cmpdStmt = new CmpdStmt(t[1],2);
 	}
 	static Fun_def[] funlist ;
 	public static Fun_def searchFun(string id){
@@ -240,25 +240,25 @@ private class CmpdStmt : Stmt{
 	}
 	AssignStmt addExpr(SCTree t){
 		assert(t.tag == "Expr");		
-		final switch(t.hits.length){
+		final switch(t.length){
 		case 1:
-			final switch(t.hits[0].tag){
+			final switch(t[0].tag){
 			case "NUM":
-				return makeTemp(EType.Int,new LitExpr(t.hits[0].val.to!int));
+				return makeTemp(EType.Int,new LitExpr(t[0].val.to!int));
 			case "ID":
-				auto assigned = Var_def.searchVar(t.hits[0].val,level);
+				auto assigned = Var_def.searchVar(t[0].val,level);
 				return new AssignStmt(assigned,new VarExpr(assigned));
 			case "Apply":
-				if(t.hits[0].hits[0].val == "print"){
-					auto printed = addExpr(t.hits[0].hits[1]);
+				if(t[0][0].val == "print"){
+					auto printed = addExpr(t[0][1]);
 					auto printstmt = new PrintStmt(printed.var);
 					stmts ~= printstmt;
 					return printed;
 				}else {
 					auto target = Fun_def.searchFun(t.searchByTag("ID").val);
 					Var[] args = [];
-					if(t.hits[0].hits.length > 1){
-						foreach(h;t.hits[0].hits[1..$]){
+					if(t[0].length > 1){
+						foreach(h;t[0][1..$]){
 							args ~= addExpr(h).var;
 						}
 					}
@@ -271,8 +271,8 @@ private class CmpdStmt : Stmt{
 				}
 			}
 		case 2:
-			auto added1 = addExpr(t.hits[1]);
-			string op = t.hits[0].val;
+			auto added1 = addExpr(t[1]);
+			string op = t[0].val;
 			final switch(op){
 			case "&":
 				assert (added1.var.type == EType.Int);
@@ -287,13 +287,13 @@ private class CmpdStmt : Stmt{
 				return new AssignStmt(temp.var,new VarExpr(temp.var));
 			}
 		case 3:
-			string op = t.hits[1].val;
+			string op = t[1].val;
 			switch(op){
 			case "=":
-				if(t.hits[0].hits.length == 2 && t.hits[0].hits[0].val == "*"){
+				if(t[0].length == 2 && t[0][0].val == "*"){
 					//*(a+2) = assign
-					auto assign = addExpr(t.hits[2]);
-					auto ptr = addExpr(t.hits[0].hits[1]);
+					auto assign = addExpr(t[2]);
+					auto ptr = addExpr(t[0][1]);
 					auto wrote = new WriteMemStmt(ptr.var,assign.var);
 					stmts ~= wrote;
 					return assign;
@@ -302,11 +302,11 @@ private class CmpdStmt : Stmt{
 			case "||":
 				auto temp = Var_def.temp(EType.Int,this.level);
 				vars ~= temp;
-				auto added1 = addExpr(t.hits[0]);
+				auto added1 = addExpr(t[0]);
 				addIfStmt(added1,{
 					stmts ~= new AssignStmt(temp.var,new LitExpr(1));
 				},{
-					auto added2 = addExpr(t.hits[2]);
+					auto added2 = addExpr(t[2]);
 					addIfStmt(added2,{
 						stmts ~= new AssignStmt(temp.var,new LitExpr(1));
 					},{
@@ -317,9 +317,9 @@ private class CmpdStmt : Stmt{
 			case "&&":
 				auto temp = Var_def.temp(EType.Int,this.level);
 				vars ~= temp;
-				auto added1 = addExpr(t.hits[0]);
+				auto added1 = addExpr(t[0]);
 				addIfStmt(added1,{
-					auto added2 = addExpr(t.hits[2]);
+					auto added2 = addExpr(t[2]);
 					addIfStmt(added2,{
 						stmts ~= new AssignStmt(temp.var,new LitExpr(1));
 					},{
@@ -331,8 +331,8 @@ private class CmpdStmt : Stmt{
 				return new AssignStmt(temp.var,new VarExpr(temp.var));
 			default :break;
 			}
-			auto added1 = addExpr(t.hits[0]);
-			auto added2 = addExpr(t.hits[2]);
+			auto added1 = addExpr(t[0]);
+			auto added2 = addExpr(t[2]);
 			final switch(op){
 			case ",":
 				return added2;
@@ -374,45 +374,45 @@ private class CmpdStmt : Stmt{
 			vars ~= new Var_def(Var.make(t,level));
 			return;
 		}
-		if (t.hits.length == 0) return;
+		if (t.length == 0) return;
 		assert(t.tag == "Stmt");
-		switch(t.hits[0].val){
+		switch(t[0].val){
 		case "if":
-			addIfStmt(addExpr(t.hits[1]),{addStmt(t.hits[2]);},{addStmt(t.hits[3]);});
+			addIfStmt(addExpr(t[1]),{addStmt(t[2]);},{addStmt(t[3]);});
 			return;
 		case "for":
 			//for(1;2;3)a;  =>  1;while(2){a;3}  =>  1;L0;if(2:L2){a;3;goto L0;};L2;
 			auto loopProdLabel = LabelStmt.temp();
 			auto loopfinishLabel = LabelStmt.temp();
-			auto var1 = addExpr(t.hits[1]);
+			auto var1 = addExpr(t[1]);
 			stmts ~= loopProdLabel;
-			auto var2 = addExpr(t.hits[2]);
+			auto var2 = addExpr(t[2]);
 			stmts ~= new IfStmt(
 					 var2.var
 					,new GotoStmt(loopfinishLabel));
-			addStmt(t.hits[4]);
-			auto var3 = addExpr(t.hits[3]);
+			addStmt(t[4]);
+			auto var3 = addExpr(t[3]);
 			stmts ~= new GotoStmt(loopProdLabel);
 			stmts ~= loopfinishLabel;
 			return;
 		case "return":
-			if(t.hits.length == 1){				 
+			if(t.length == 1){				 
 				auto ret = makeTemp(EType.Int,new LitExpr(0));
 				stmts ~= new ReturnStmt(ret.var);
 			}else{
-				auto ret = addExpr(t.hits[1]);
+				auto ret = addExpr(t[1]);
 				stmts ~= new ReturnStmt(ret.var);
 			}
 			return;
 		default:
 			break;
 		}
-		switch(t.hits[0].tag){
+		switch(t[0].tag){
 		case "Expr":
-			addExpr(t.hits[0]);
+			addExpr(t[0]);
 			return;
 		case "Stmts":
-			stmts ~= new CmpdStmt(t.hits[0],level+1);
+			stmts ~= new CmpdStmt(t[0],level+1);
 			return;
 		default:
 			return;
@@ -421,7 +421,7 @@ private class CmpdStmt : Stmt{
 	public this(SCTree t,int level){
 		assert(t.tag == "Stmts");
 		this.level = level;
-		foreach(h;t.hits){addStmt(h);}
+		foreach(h;t){addStmt(h);}
 	}
 	public override string toString () const {
 		auto tab = "";
@@ -567,17 +567,18 @@ private class ApplyStmt : Stmt{
 	}
 	public override string[] toMips(){
 		string[] res;
-		res ~= 	Mips.addiu(R.t1,R.sp,cast(int)(-4 * args.length));
-		foreach(int i,arg;args){
-			res ~= arg.LW(R.t0);
-			res ~= Mips.sw(R.t0,4 * i,R.t1);
+		if(args.length > 0){
+			res ~= 	Mips.addiu(R.t1,R.sp,cast(int)(-4 * args.length));
+			foreach(int i,arg;args){
+				res ~= arg.LW(R.t0);
+				res ~= Mips.sw(R.t0,4 * i,R.t1);
+			}
+			res ~= Mips.move(R.sp,R.t1);
 		}
-		return res ~= [ 
-			Mips.move(R.sp,R.t1),
-			Mips.jal(target.name),
-			Mips.addiu(R.sp,R.sp,cast(int)(4 * args.length)),
-			dest.SW(R.v0),
-		];
+		res ~= 	Mips.jal(target.name);
+		if(args.length > 0) 
+			res ~= Mips.addiu(R.sp,R.sp,cast(int)(4 * args.length));
+		return res ~ dest.SW(R.v0);
 	}
 }
 private class ReturnStmt : Stmt{ 

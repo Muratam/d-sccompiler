@@ -49,10 +49,7 @@ class SCType{
 	}
 }
 private SCType[string] getInitEnv(){return ["":new SCType("")].init;}
-private bool writeError(SCTree t,string str){
-	writeln(str ~ " [" ~ t.begin.to!string ~ "," ~t.end.to!string ~ "]");
-	return false;
-}
+
 private SCType writeTypeError(SCTree t,string str){
 	writeln(str ~ " [" ~ t.begin.to!string ~ "," ~t.end.to!string ~ "]");
 	return null;
@@ -97,22 +94,22 @@ private SCType checkHitsType(ref SCType[string][] env,SCTree[] hits,string whenC
 	else return new SCType(whenCollectResType);
 }
 private SCType checkStmtType(ref SCType[string][] env,SCTree t){
-	if (t.hits.length == 0) return new SCType("void");
-	switch(t.hits[0].val){
+	if (t.length == 0) return new SCType("void");
+	switch(t[0].val){
 	case "if": // [if,exp,stmt,stmt]
-		if (env.checkType(t.hits[1]).type != "int") return null;
-		return env.checkHitsType(t.hits[2..4]);
+		if (env.checkType(t[1]).type != "int") return null;
+		return env.checkHitsType(t[2..4]);
 	case "for"://[for,exp,exp!,exp,stmt]
-		if (env.checkType(t.hits[2]).type != "int") return null;
-		return env.checkHitsType(t.hits[1..5]);
+		if (env.checkType(t[2]).type != "int") return null;
+		return env.checkHitsType(t[1..5]);
 	case "return":
 		auto returnType = env[0]["#returnType"];
 		if(returnType.type == "void"){
-			if (t.hits.length == 1) return new SCType("void");
+			if (t.length == 1) return new SCType("void");
 			else return t.writeTypeError("return type must be void !!!");
 		}else{
-			if (t.hits.length == 1) return t.writeTypeError("return type must not be void !!");
-			if (returnType.type == env.checkType(t.hits[1]).type) 
+			if (t.length == 1) return t.writeTypeError("return type must not be void !!");
+			if (returnType.type == env.checkType(t[1]).type) 
 				return new SCType("void");
 			return t.writeTypeError("return type differs!!!");
 		}
@@ -121,37 +118,37 @@ private SCType checkStmtType(ref SCType[string][] env,SCTree t){
 	default :break;
 	}	
 
-	final switch(t.hits[0].tag){
+	final switch(t[0].tag){
 	case "Stmts": 
-		if (!semanticAnalyze(t.hits[0],env)) return null;
+		if (!semanticAnalyze(t[0],env)) return null;
 		else return new SCType("void");
 	case "Expr": 
-		return env.checkType(t.hits[0]);					
+		return env.checkType(t[0]);					
 	}
 }
 private SCType checkExprType(ref SCType[string][] env,SCTree t){
 	// [Expr,"||",Expr] / ["*",Expr] / [Expr]		
-	final switch(t.hits.length){
+	final switch(t.length){
 	case 1: 
-		return env.checkType(t.hits[0]);
+		return env.checkType(t[0]);
 	case 2: 
-		auto operator = t.hits[0].val;
-		auto type1 = env.checkType(t.hits[1]);
+		auto operator = t[0].val;
+		auto type1 = env.checkType(t[1]);
 		if (type1 is null) return null;
 		final switch (operator){
 		case "&": 
-			if(t.hits[1].hits.length == 1 && t.hits[1].hits[0].tag == "ID"){
+			if(t[1].length == 1 && t[1][0].tag == "ID"){
 				return op1(type1,["int","int *"]);
 			}else return t.writeTypeError("can't '&' operator not for variable");
 		case "*": 
 			return op1(type1,["int *","int"],["int * *","int *"]);
 		}
 	case 3:
-		auto type1 = env.checkType(t.hits[0]);
-		auto type2 = env.checkType(t.hits[2]);
+		auto type1 = env.checkType(t[0]);
+		auto type2 = env.checkType(t[2]);
 		if (type1 is null) return null;
 		if (type2 is null) return null;
-		auto Operator = t.hits[1].val;
+		auto Operator = t[1].val;
 		final switch(Operator){
 		case "+":
 			return op2(type1,type2
@@ -179,6 +176,7 @@ private SCType checkExprType(ref SCType[string][] env,SCTree t){
 	}
 }
 private SCType checkType(ref SCType[string][] env,SCTree t){
+	t.tag.writeln;
 	final switch(t.tag){
 	case "Stmts":
 		return semanticAnalyze(t,env) ? new SCType("void"):null;
@@ -187,16 +185,16 @@ private SCType checkType(ref SCType[string][] env,SCTree t){
 	case "Expr":
 		return env.checkExprType(t);
 	case "Apply":
-		auto id = t.hits[0].val;
+		auto id = t[0].val;
 		foreach_reverse(v;env){
 			if(id !in v)continue;
 			auto regestered = v[id];
 			if (! regestered.isFunction)
 				return t.writeTypeError(id ~ " is not function!");
-			if (regestered.args.length != t.hits.length -1)
+			if (regestered.args.length != t.length -1)
 				return t.writeTypeError(id ~ ": arg size wrong !!");
 			if (regestered.args.length > 0){
-				auto params = t.hits[1..$].map!(a=>env.checkType(a));
+				auto params = t[1..$].map!(a=>env.checkType(a));
 				if(params.any!(a => a is null)) 
 					return t.writeTypeError(id ~ ": args illegal !!");
 				if(zip(params,regestered.args).any!(a=>!a[0].sameType(a[1])))
@@ -237,17 +235,17 @@ bool semanticAnalyze(SCTree t,ref SCType[string][] env,string info = ""){
 	case "Fun_proto":
 	case "Fun_def":
 		auto pre_lv = env.length ; 
-		if(t.hits.any!(a => !semanticAnalyze(a,env,t.tag))) return false;
+		if(t[].any!(a => !semanticAnalyze(a,env,t.tag))) return false;
 		env = env[0..pre_lv];
 		return true;	
 	case "Fun_declare":
-		auto func = new SCType(t.hits[0],true,info == "Fun_proto");
-		auto id = t.hits[1].val;
+		auto func = new SCType(t[0],true,info == "Fun_proto");
+		auto id = t[1].val;
 		if (func.type == "void *")
 			return t.writeError("void * is not allowed"); 
 		SCType[string] paramEnv;
-		if (t.hits.length > 2){
-			foreach(param;t.hits[2..$]){
+		if (t.length > 2){
+			foreach(param;t[2..$]){
 				auto ptype = new SCType(param.searchByTag("Type_info"));
 				auto pid   = param.searchByTag("ID").val;
 				if(ptype.type.startsWith("void"))
@@ -269,13 +267,13 @@ bool semanticAnalyze(SCTree t,ref SCType[string][] env,string info = ""){
 	
 	case "Stmts":
 		env ~= getInitEnv();
-		if(!t.hits.all!(a => semanticAnalyze(a,env,info)))
+		if(!t[].all!(a => semanticAnalyze(a,env,info)))
 			return t.writeError("wrong type!");
 		env = env[0..$-1];
 		return true;	
 	case "Stmt": 
 		return env.checkType(t) !is null;
 	default :
-		return t.hits.all!(a => semanticAnalyze(a,env,info));
+		return t[].all!(a => semanticAnalyze(a,env,info));
 	}
 }

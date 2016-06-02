@@ -4,17 +4,17 @@ import smallc.scdef,smallc.sctrim;
 import smallc.scsemanticanalysis,smallc.scintermediate;
 import smallc.scmips;
 
-
+//le3soft-staff@fos.kuis.kyoto-u.ac.jp / 最終報告 => 最終報告
 //sample ng1
 //basic gcd global 
 //err shape02:isNum=>isIDで代入文 type09 type10
 //advance bubble insert ret_ptr:prototype宣言
-//
+//木構造を簡単に扱える機構が欲しい
 static if (!makeModule){
 	import smallc.sc;
 
 	void analyze(string code){	
-		//("# " ~ code).writeln;
+		("# " ~ code).writeln;
 		const printproto = "void print(int i){}";
 		ParseTree p = SC(printproto ~ code);
 		//p.writeln;
@@ -22,13 +22,13 @@ static if (!makeModule){
 			"Parse Error !!\n\n".writeln;
 			return;
 		}
-		SCTree g = SCTree(p);
+		SCTree g = new SCTree(p);
 		if (!tryTrim(g)) {
 			"reserved Error".writeln;
 			return;
 		}
 		//g.writeln;
-		if (!g.semanticAnalyze){
+		if (!semanticAnalyze(g)){
 			"Using Illegal Semantics !!!".writeln;
 			return;
 		}
@@ -52,6 +52,7 @@ void main(string[] args){
 }
 
 unittest{
+	writeln([new SCTree("aa"),null,new SCTree("aa"),null,null,null,new SCTree("aa")]);
 	[
 		//"int main(){print(111);print(444);}",
 		//"int d(){}int main(){print(111);d();print(444);}",
@@ -61,7 +62,7 @@ unittest{
 		//"int d(){if(0)return 72;return 11;}int main(){print(d());}",
 		//"int d(int n){return n;}int main(){print(d(12));}",
 		//"int sum(int a,int b,int c,int d){return a+b+c+d; } int main(){print(sum(1,2,3,4));}"
-		//"int fa(int n){	if(n == 0)return 1;else return n * fa(n-1);}int main(){ print(fa(4));}"
+		"int fa(int n){	if(n == 0)return 1;else return n * fa(n-1);}int main(){ print(fa(4));}"
 		//"int a;int main(){a = 72;print(a);}",
 	].each!analyze;
 	"".writeln;
