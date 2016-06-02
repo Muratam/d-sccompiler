@@ -20,10 +20,10 @@ class SCType{
 		this.info = info;
 	}
 	public this(SCTree t,bool isFunction = false,bool isProto = false){
-		assert(t.tag == "Type_info");
-		this.type = t.searchByTag("Type").val;
-		if (t.canFindByTag("ptr")) type ~= " *";
-		if (t.canFindByTag("array")) {
+		assert(t() == "Type_info");
+		this.type = t.find("Type").elem;
+		if (t.has("ptr")) type ~= " *";
+		if (t.has("array")) {
 			type ~= " *";
 			info = "isArray";
 		}
@@ -95,7 +95,7 @@ private SCType checkHitsType(ref SCType[string][] env,SCTree[] hits,string whenC
 }
 private SCType checkStmtType(ref SCType[string][] env,SCTree t){
 	if (t.length == 0) return new SCType("void");
-	switch(t[0].val){
+	switch(t[0].elem){
 	case "if": // [if,exp,stmt,stmt]
 		if (env.checkType(t[1]).type != "int") return null;
 		return env.checkHitsType(t[2..4]);
@@ -118,7 +118,7 @@ private SCType checkStmtType(ref SCType[string][] env,SCTree t){
 	default :break;
 	}	
 
-	final switch(t[0].tag){
+	final switch(t[0]()){
 	case "Stmts": 
 		if (!semanticAnalyze(t[0],env)) return null;
 		else return new SCType("void");
@@ -132,12 +132,12 @@ private SCType checkExprType(ref SCType[string][] env,SCTree t){
 	case 1: 
 		return env.checkType(t[0]);
 	case 2: 
-		auto operator = t[0].val;
+		auto operator = t[0].elem;
 		auto type1 = env.checkType(t[1]);
 		if (type1 is null) return null;
 		final switch (operator){
 		case "&": 
-			if(t[1].length == 1 && t[1][0].tag == "ID"){
+			if(t[1].length == 1 && t[1][0]() == "ID"){
 				return op1(type1,["int","int *"]);
 			}else return t.writeTypeError("can't '&' operator not for variable");
 		case "*": 
@@ -148,7 +148,7 @@ private SCType checkExprType(ref SCType[string][] env,SCTree t){
 		auto type2 = env.checkType(t[2]);
 		if (type1 is null) return null;
 		if (type2 is null) return null;
-		auto Operator = t[1].val;
+		auto Operator = t[1].elem;
 		final switch(Operator){
 		case "+":
 			return op2(type1,type2
@@ -176,8 +176,7 @@ private SCType checkExprType(ref SCType[string][] env,SCTree t){
 	}
 }
 private SCType checkType(ref SCType[string][] env,SCTree t){
-	t.tag.writeln;
-	final switch(t.tag){
+	final switch(t()){
 	case "Stmts":
 		return semanticAnalyze(t,env) ? new SCType("void"):null;
 	case "Stmt":
@@ -185,7 +184,7 @@ private SCType checkType(ref SCType[string][] env,SCTree t){
 	case "Expr":
 		return env.checkExprType(t);
 	case "Apply":
-		auto id = t[0].val;
+		auto id = t[0].elem;
 		foreach_reverse(v;env){
 			if(id !in v)continue;
 			auto regestered = v[id];
@@ -204,7 +203,7 @@ private SCType checkType(ref SCType[string][] env,SCTree t){
 		}
 		return t.writeTypeError(id ~ " was not declared !!");
 	case "ID":
-		auto id = t.val ;
+		auto id = t.elem ;
 		foreach_reverse(v;env){
 			if (id !in v) continue;
 			auto regestered = v[id];
@@ -223,31 +222,31 @@ bool semanticAnalyze(SCTree t){
 	return semanticAnalyze(t,env);
 }
 bool semanticAnalyze(SCTree t,ref SCType[string][] env,string info = ""){
-	switch(t.tag){
+	switch(t()){
 	case "Var_def":
-		auto type = new SCType(t.searchByTag("Type_info"));
+		auto type = new SCType(t.find("Type_info"));
 		if (type.type.startsWith("void")) 
 			return t.writeError("can't declare void type!!");
-		auto id = t.searchByTag("ID").val;
+		auto id = t.find("ID").elem;
 		if(!env.addVar(id,type)) 
 			return t.writeError(id ~ " already exists");
 		return true;	
 	case "Fun_proto":
 	case "Fun_def":
 		auto pre_lv = env.length ; 
-		if(t[].any!(a => !semanticAnalyze(a,env,t.tag))) return false;
+		if(t[].any!(a => !semanticAnalyze(a,env,t()))) return false;
 		env = env[0..pre_lv];
 		return true;	
 	case "Fun_declare":
 		auto func = new SCType(t[0],true,info == "Fun_proto");
-		auto id = t[1].val;
+		auto id = t[1].elem;
 		if (func.type == "void *")
 			return t.writeError("void * is not allowed"); 
 		SCType[string] paramEnv;
 		if (t.length > 2){
 			foreach(param;t[2..$]){
-				auto ptype = new SCType(param.searchByTag("Type_info"));
-				auto pid   = param.searchByTag("ID").val;
+				auto ptype = new SCType(param.find("Type_info"));
+				auto pid   = param.find("ID").elem;
 				if(ptype.type.startsWith("void"))
 					return param.writeError("void type does not allowed");
 				if(pid in paramEnv)

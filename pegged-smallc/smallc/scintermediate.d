@@ -14,16 +14,16 @@ private struct Var {
 	R ptr = R.sp;
 	bool isArray(){return arrayNum > 0;}
 	static Var make(SCTree t,int level,R ptr = R.sp){
-		auto id = t.searchByTag("ID");
-		auto type = new SCType( t.searchByTag("Type_info"));
+		auto id = t.find("ID");
+		auto type = new SCType( t.find("Type_info"));
 		EType res = EType.Int;
 		if (type.type == "int *") res = EType.Intptr;
 		if (type.type == "int * *") res = EType.Intptrptr;
 		if (type.type == "void") res = EType.Void;
 		int arrayNum = 0;
-		if (t.canFindByTag("array"))
-			arrayNum = t.searchByTag("array").val.to!int;
-		return Var(id.val,res,level,arrayNum,ptr);
+		if (t.has("array"))
+			arrayNum = t.find("array").elem.to!int;
+		return Var(id.elem,res,level,arrayNum,ptr);
 	}
 	public string toString() const {
 		return "("
@@ -96,10 +96,10 @@ class Global{
 		Var_def.init();
 		Fun_def.init();
 		LabelStmt.init();
-		if (t.tag == "SC")t = t[0];
-		assert (t.tag == "Global");
+		if (t() == "SC")t = t[0];
+		assert (t() == "Global");
 		foreach(h;t){
-			switch(h.tag){
+			switch(h()){
 			case "Var_def":
 				var_defs ~= new Var_def(Var.make(h,0,R.gp));	
 				break;
@@ -184,8 +184,8 @@ private class Fun_def{
 
 	private int maxOffset = 0;
 	public this (SCTree t){
-		assert (t.tag == "Fun_def");
-		auto declare = t.searchByTag("Fun_declare");
+		assert (t() == "Fun_def");
+		auto declare = t.find("Fun_declare");
 		var = Var.make(declare,0);
 		if(declare.length > 2){
 			foreach(h;declare[2..$]){
@@ -239,23 +239,23 @@ private class CmpdStmt : Stmt{
 		return assigned;
 	}
 	AssignStmt addExpr(SCTree t){
-		assert(t.tag == "Expr");		
+		assert(t() == "Expr");		
 		final switch(t.length){
 		case 1:
-			final switch(t[0].tag){
+			final switch(t[0]()){
 			case "NUM":
-				return makeTemp(EType.Int,new LitExpr(t[0].val.to!int));
+				return makeTemp(EType.Int,new LitExpr(t[0].elem.to!int));
 			case "ID":
-				auto assigned = Var_def.searchVar(t[0].val,level);
+				auto assigned = Var_def.searchVar(t[0].elem,level);
 				return new AssignStmt(assigned,new VarExpr(assigned));
 			case "Apply":
-				if(t[0][0].val == "print"){
+				if(t[0][0].elem == "print"){
 					auto printed = addExpr(t[0][1]);
 					auto printstmt = new PrintStmt(printed.var);
 					stmts ~= printstmt;
 					return printed;
 				}else {
-					auto target = Fun_def.searchFun(t.searchByTag("ID").val);
+					auto target = Fun_def.searchFun(t.find("ID").elem);
 					Var[] args = [];
 					if(t[0].length > 1){
 						foreach(h;t[0][1..$]){
@@ -272,7 +272,7 @@ private class CmpdStmt : Stmt{
 			}
 		case 2:
 			auto added1 = addExpr(t[1]);
-			string op = t[0].val;
+			string op = t[0].elem;
 			final switch(op){
 			case "&":
 				assert (added1.var.type == EType.Int);
@@ -287,10 +287,10 @@ private class CmpdStmt : Stmt{
 				return new AssignStmt(temp.var,new VarExpr(temp.var));
 			}
 		case 3:
-			string op = t[1].val;
+			string op = t[1].elem;
 			switch(op){
 			case "=":
-				if(t[0].length == 2 && t[0][0].val == "*"){
+				if(t[0].length == 2 && t[0][0].elem == "*"){
 					//*(a+2) = assign
 					auto assign = addExpr(t[2]);
 					auto ptr = addExpr(t[0][1]);
@@ -370,13 +370,13 @@ private class CmpdStmt : Stmt{
 	}
 
 	void addStmt(SCTree t){
-		if(t.tag == "Var_def"){
+		if(t() == "Var_def"){
 			vars ~= new Var_def(Var.make(t,level));
 			return;
 		}
 		if (t.length == 0) return;
-		assert(t.tag == "Stmt");
-		switch(t[0].val){
+		assert(t() == "Stmt");
+		switch(t[0].elem){
 		case "if":
 			addIfStmt(addExpr(t[1]),{addStmt(t[2]);},{addStmt(t[3]);});
 			return;
@@ -407,7 +407,7 @@ private class CmpdStmt : Stmt{
 		default:
 			break;
 		}
-		switch(t[0].tag){
+		switch(t[0]()){
 		case "Expr":
 			addExpr(t[0]);
 			return;
@@ -419,7 +419,7 @@ private class CmpdStmt : Stmt{
 		}
 	}
 	public this(SCTree t,int level){
-		assert(t.tag == "Stmts");
+		assert(t() == "Stmts");
 		this.level = level;
 		foreach(h;t){addStmt(h);}
 	}
