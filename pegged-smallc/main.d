@@ -23,12 +23,12 @@ static if (!makeModule){
 			return;
 		}
 		SCTree g = new SCTree(p);
-		if (!tryTrim(g)) {
+		if (!g.tryTrim()) {
 			"reserved Error".writeln;
 			return;
 		}
 		//g.writeln;
-		if (!semanticAnalyze(g)){
+		if (!new SemanticAnalyze().startAnalyze(g)){
 			"Using Illegal Semantics !!!".writeln;
 			return;
 		}

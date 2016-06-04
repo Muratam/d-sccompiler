@@ -96,10 +96,10 @@ class Global{
 		Var_def.init();
 		Fun_def.init();
 		LabelStmt.init();
-		if (t() == "SC")t = t[0];
-		assert (t() == "Global");
+		if (t.tag == "SC")t = t[0];
+		assert (t.tag  == "Global");
 		foreach(h;t){
-			switch(h()){
+			switch(h.tag ){
 			case "Var_def":
 				var_defs ~= new Var_def(Var.make(h,0,R.gp));	
 				break;
@@ -184,7 +184,7 @@ private class Fun_def{
 
 	private int maxOffset = 0;
 	public this (SCTree t){
-		assert (t() == "Fun_def");
+		assert (t.tag  == "Fun_def");
 		auto declare = t.find("Fun_declare");
 		var = Var.make(declare,0);
 		if(declare.length > 2){
@@ -239,10 +239,10 @@ private class CmpdStmt : Stmt{
 		return assigned;
 	}
 	AssignStmt addExpr(SCTree t){
-		assert(t() == "Expr");		
+		assert(t.tag  == "Expr");		
 		final switch(t.length){
 		case 1:
-			final switch(t[0]()){
+			final switch(t[0].tag ){
 			case "NUM":
 				return makeTemp(EType.Int,new LitExpr(t[0].elem.to!int));
 			case "ID":
@@ -370,12 +370,12 @@ private class CmpdStmt : Stmt{
 	}
 
 	void addStmt(SCTree t){
-		if(t() == "Var_def"){
+		if(t.tag  == "Var_def"){
 			vars ~= new Var_def(Var.make(t,level));
 			return;
 		}
 		if (t.length == 0) return;
-		assert(t() == "Stmt");
+		assert(t.tag  == "Stmt");
 		switch(t[0].elem){
 		case "if":
 			addIfStmt(addExpr(t[1]),{addStmt(t[2]);},{addStmt(t[3]);});
@@ -407,7 +407,7 @@ private class CmpdStmt : Stmt{
 		default:
 			break;
 		}
-		switch(t[0]()){
+		switch(t[0].tag ){
 		case "Expr":
 			addExpr(t[0]);
 			return;
@@ -419,7 +419,7 @@ private class CmpdStmt : Stmt{
 		}
 	}
 	public this(SCTree t,int level){
-		assert(t() == "Stmts");
+		assert(t.tag  == "Stmts");
 		this.level = level;
 		foreach(h;t){addStmt(h);}
 	}

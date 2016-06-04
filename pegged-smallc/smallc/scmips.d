@@ -3,19 +3,6 @@ import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv;
 import smallc.scintermediate;
 import pegged.grammar;
 
-//微妙 :: sp のはグローバルを考慮するべき
-//  : VarExpr : t0 = sp[?] 
-//  : LitExpr : t0 = n 
-//  : AopExpr : t1 = sp[?];t2 = sp[?];t0 = t1 op t2 
-//  : AddrExpr: t0 = sp + Offset 
-//  : PrintStmt : print(t0)
-//  : AssignStmt : sp[?] = t0 
-//  : WriteMemStmt: *a = b
-//  : == ReadMemStmt: a = *b
-//  : IfStmt    : beqz
-//  : GotoStmt  : j
-//  : ReturnStmt : a0 = t0 ; back [fp,ra]
-
 struct R{
 	string name;
 	alias name this;
