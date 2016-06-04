@@ -2,6 +2,9 @@ module smallc.sctrim;
 import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv;
 import pegged.grammar;
 
+//base class : STree にして、SCTreeをextends にして、処理を見やすくする
+//envなどを含むクラスにする
+
 //trimExpr         : Expr系の トリミング
 //trim : 整形 =>
 //      Stmts : [Var_def*,Stmt*]
@@ -96,7 +99,6 @@ class SCTree {
 		writeln(str ~ " [" ~ begin.to!string ~ "," ~ end.to!string ~ "]");
 		return false;
 	}
-
 }
 private SCTree makeTypeInfo(SCTree base,SCTree type,bool ptr = false,string arrayNum = ""){
 	auto res = base.makeLeaf("Type_info","");
