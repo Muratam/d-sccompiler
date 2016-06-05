@@ -43,24 +43,6 @@ static struct Mips{
 	static string lw(R to,int offset,R ptr){
 		return "lw " ~ to   ~ ", "~offset.to!string ~ "("~ptr~")"; 
 	}
-	static string[] startsFunc(int maxOffset){
-		endsFunc = mkEndsFunc(maxOffset);
-		return [ 
-			Mips.addiu(R.sp,R.sp,-maxOffset),
-			Mips.sw(R.ra,4,R.sp),
-			Mips.sw(R.fp,0,R.sp),
-			Mips.addiu(R.fp,R.sp, maxOffset)
-		];
-	}
-	private static auto mkEndsFunc (int maxOffset) {
-		return [ 
-			Mips.lw(R.ra,4,R.sp),
-			Mips.lw(R.fp,0,R.sp),
-			Mips.addiu(R.sp,R.sp,maxOffset),
-			Mips.jr(R.ra)
-		];
-	}
-	static string[] endsFunc;
 
 	//Jump//////////////////////////////////////////////////////////
 	//goto $addr

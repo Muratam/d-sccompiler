@@ -5,6 +5,123 @@ import smallc.scdef,smallc.sctrim,smallc.scsemanticanalysis;
 import smallc.scmips;
 
 
+class ToMips{
+	string LW(Var var,R to){
+		if(var.isArray()) return Mips.addiu(to,var.ptr,var.ROffset);
+		else return Mips.lw(to,var.ROffset,var.ptr);
+	}
+	string SW(Var var,R from){
+		return Mips.sw(from,var.ROffset,var.ptr);
+	}
+	public this(){}
+	string[] startsFunc(int maxOffset){
+		endsFunc = mkEndsFunc(maxOffset);
+		return [ 
+			Mips.addiu(R.sp,R.sp,-maxOffset),
+			Mips.sw(R.ra,4,R.sp),
+			Mips.sw(R.fp,0,R.sp),
+			Mips.addiu(R.fp,R.sp, maxOffset)
+		];
+	}
+	auto mkEndsFunc (int maxOffset) {
+		return [ 
+			Mips.lw(R.ra,4,R.sp),
+			Mips.lw(R.fp,0,R.sp),
+			Mips.addiu(R.sp,R.sp,maxOffset),
+			Mips.jr(R.ra)
+		];
+	}
+	string[] endsFunc;
+
+	public string toMipsCode(Global global){
+		if(!global.offseted) return "call toOffset first !!! \n";		
+		auto mipsCode = toMips(global);
+		auto res = "";
+		foreach(m;mipsCode){
+			if (m[$-1] == ':') res ~= m;
+			else res ~= "  " ~ m;
+			res ~= "\n";
+		}
+		return res;
+	}
+	string[] toMips(Object o){
+		return o.castSwitch!(
+			(Global a)=>
+				[".text",".globl main"] ~
+				a.fun_defs.map!(a=>toMips(a)).join
+			,(Fun_def a)=>
+				a.var.name == "print" ?  null :
+				[a.var.name ~ ":"] 
+					~ startsFunc(a.maxOffset)
+					~ toMips(a.cmpdStmt)
+					~ endsFunc
+			,(CmpdStmt a)=> 
+				a.stmts.map!(a=>toMips(a)).join
+			,(AssignStmt a)=>
+				toMips(a.expr) ~ [SW(a.var,R.t0)]
+			,(WriteMemStmt a)=>[
+				LW(a.src,R.t0),
+				LW(a.dest,R.t1),
+				Mips.sw(R.t0,0,R.t1),
+			],(ReadMemStmt a)=>[
+				LW(a.src,R.t0),
+				Mips.lw(R.t0,0,R.t0),
+				SW(a.dest,R.t0)
+			],(IfStmt a)=>[
+				LW(a.var,R.t0),
+				Mips.beqz(R.t0,a.elseLabel.label)
+			],(GotoStmt a)=>[
+				Mips.j(a.label)
+			],(ApplyStmt a)=>{
+				string[] res;
+				if(a.args.length > 0){
+					res ~= 	Mips.addiu(R.t1,R.sp,cast(int)(-4 * a.args.length));
+					foreach(int i,arg;a.args){
+						res ~= LW(arg,R.t0);
+						res ~= Mips.sw(R.t0,4 * i,R.t1);
+					}
+					res ~= Mips.move(R.sp,R.t1);
+				}
+				res ~= 	Mips.jal(a.target.name);
+				if(a.args.length > 0) 
+					res ~= Mips.addiu(R.sp,R.sp,cast(int)(4 * a.args.length));
+				return res ~ SW(a.dest,R.v0);				
+			}(),(ReturnStmt a)=>
+				LW(a.var,R.v0) ~ endsFunc
+			,(PrintStmt a)=>[
+				LW(a.var,R.a0),
+				Mips.li(R.v0,1),
+				"syscall",
+			],(LabelStmt a)=>[
+				a.name ~ ":"
+			],(VarExpr a)=>[
+				LW(a.var,R.t0)
+			],(LitExpr a)=>[
+				Mips.li(R.t0,a.num)
+			],(AopExpr a)=>{
+				string[] res = [
+					LW(a.Left,R.t1) ,
+					LW(a.Right,R.t2) 
+				];
+				final switch(a.Op){
+					case "+": return res ~ Mips.add(R.t0,R.t1,R.t2);			
+					case "-": return res ~ Mips.sub(R.t0,R.t1,R.t2);
+					case "*": return res ~ Mips.mul(R.t0,R.t1,R.t2);
+					case "/": return res ~ Mips.div(R.t0,R.t1,R.t2);
+					case "==":return res ~ Mips.seq(R.t0,R.t1,R.t2);
+					case "!=":return res ~ Mips.sne(R.t0,R.t1,R.t2);
+					case "<=":return res ~ Mips.sle(R.t0,R.t1,R.t2);
+					case ">=":return res ~ Mips.sge(R.t0,R.t1,R.t2);
+					case ">" :return res ~ Mips.sgt(R.t0,R.t1,R.t2);
+					case "<" :return res ~ Mips.slt(R.t0,R.t1,R.t2);
+				}
+			}(),(AddrExpr a)=>[ 
+				Mips.addiu(R.t0,R.sp,a.var.ROffset)
+			],()=>["No Mips Codes"])();
+	}
+}
+
+
 private enum EType {Int,Intptr,Intptrptr,Void,Offset}
 private struct Var {
 	string name;
@@ -80,13 +197,6 @@ private struct Var {
 		assert(name.startsWith("$"));
 		return name[1..$].to!int;
 	} 
-	public string LW(R to){
-		if(isArray()) return Mips.addiu(to,ptr,ROffset);
-		else return Mips.lw(to,ROffset,ptr);
-	}
-	public string SW(R from){
-		return Mips.sw(from,ROffset,ptr);
-	}
 }
 
 class Global{
@@ -129,25 +239,7 @@ class Global{
 		offseted = true;
 	}
 	bool offseted = false;
-	string[] toMips(){
-		auto res = [".text",".globl main"];
-		//ditto : No Var_def !!!!
-		foreach(fun_def;fun_defs){
-			res ~= fun_def.toMips();
-		}
-		return res;
-	}
-	public string toMipsCode(){
-		if(!offseted) return "call toOffset first !!! \n";		
-		auto mipsCode = toMips();
-		auto res = "";
-		foreach(m;mipsCode){
-			if (m[$-1] == ':') res ~= m;
-			else res ~= "  " ~ m;
-			res ~= "\n";
-		}
-		return res;
-	}
+
 }
 private class Var_def {
 	public Var var;
@@ -218,13 +310,6 @@ private class Fun_def{
 		Var.initOfs(8,false,false);
 		cmpdStmt.toOffset();	
 		maxOffset = Var.MaxOffset;
-	}
-	public string[] toMips(){
-		if (var.name == "print") return null;
-		string[] res = [var.name ~ ":"];
-		return res ~ Mips.startsFunc(maxOffset)
-		    ~ cmpdStmt.toMips()
-			~ Mips.endsFunc;
 	}
 }
 private class CmpdStmt : Stmt{
@@ -438,15 +523,9 @@ private class CmpdStmt : Stmt{
 		foreach(ref s;stmts) s.toOffset();				
 	}
 
-	public override string[] toMips(){
-		string[] res;
-		foreach(stmt;stmts) res ~= stmt.toMips();
-		return res;
-	}
 }
 private class Stmt {
 	public void toOffset(){}
-	public string[] toMips(){return ["No Stmt"];}
 	public override string toString() const{return null;}
 }
 private class AssignStmt : Stmt{ 
@@ -463,11 +542,6 @@ private class AssignStmt : Stmt{
 		var.searchToOffset();
 		expr.toOffset();
 	}	
-	public override string[] toMips(){
-		return expr.toMips() ~ [
-			var.SW(R.t0)
-		];
-	}
 }
 //*pa = 12;
 private class WriteMemStmt : Stmt{
@@ -482,13 +556,6 @@ private class WriteMemStmt : Stmt{
 	public override void toOffset() {
 		dest.searchToOffset();
 		src.searchToOffset();
-	}
-	public override string[] toMips(){
-		return [
-			src.LW(R.t0),
-			dest.LW(R.t1),
-			Mips.sw(R.t0,0,R.t1),
-		];
 	}
 }
 //pa = &a;
@@ -505,14 +572,8 @@ private class ReadMemStmt : Stmt{
 		dest.searchToOffset();
 		src.searchToOffset();
 	}
-	public override string[] toMips(){
-		return [
-			src.LW(R.t0),
-			Mips.lw(R.t0,0,R.t0),
-			dest.SW(R.t0)
-		];
-	}
 }
+
 private class IfStmt : Stmt{
 	public Var var;
 	public GotoStmt elseLabel;
@@ -526,12 +587,7 @@ private class IfStmt : Stmt{
 	public override void toOffset() {
 		var.searchToOffset();
 	}
-	public override string[] toMips(){
-		return [
-			var.LW(R.t0),
-			Mips.beqz(R.t0,elseLabel.label)
-		];
-	}
+
 }
 private class GotoStmt : Stmt{ 
 	public string label; 
@@ -540,10 +596,7 @@ private class GotoStmt : Stmt{
 	}
 	public override string toString() const{
 		return "GotoStmt : " ~ label;
-	}
-	public override string[] toMips(){
-		return [Mips.j(label)];
-	}
+	}	
 }
 private class ApplyStmt : Stmt{ 
 	public Var dest,target; //dest = target(args...)
@@ -565,21 +618,6 @@ private class ApplyStmt : Stmt{
 		dest.searchToOffset();
 		foreach(ref arg;args) arg.searchToOffset();
 	}
-	public override string[] toMips(){
-		string[] res;
-		if(args.length > 0){
-			res ~= 	Mips.addiu(R.t1,R.sp,cast(int)(-4 * args.length));
-			foreach(int i,arg;args){
-				res ~= arg.LW(R.t0);
-				res ~= Mips.sw(R.t0,4 * i,R.t1);
-			}
-			res ~= Mips.move(R.sp,R.t1);
-		}
-		res ~= 	Mips.jal(target.name);
-		if(args.length > 0) 
-			res ~= Mips.addiu(R.sp,R.sp,cast(int)(4 * args.length));
-		return res ~ dest.SW(R.v0);
-	}
 }
 private class ReturnStmt : Stmt{ 
 	public Var var;
@@ -592,10 +630,8 @@ private class ReturnStmt : Stmt{
 	public override void toOffset() {
 		var.searchToOffset();
 	}
-	public override string[] toMips(){
-		return var.LW(R.v0) ~ Mips.endsFunc;
-	}
 }
+
 private class PrintStmt : Stmt{
 	public Var var;
 	public this (Var var){this.var = var;}
@@ -605,14 +641,8 @@ private class PrintStmt : Stmt{
 	public override void toOffset() {
 		var.searchToOffset();
 	}
-	public override string[] toMips(){
-		return [
-			var.LW(R.a0),
-			Mips.li(R.v0,1),
-			"syscall",
-		];
-	}
 }
+
 private class LabelStmt : Stmt{
 	public string name;
 	static int tempIndex = 0;
@@ -625,17 +655,15 @@ private class LabelStmt : Stmt{
 		return new LabelStmt("LABEL" ~ tempIndex.to!string);
 	}
 	public static void init(){tempIndex = 0;}
-	public override string[] toMips(){
-		return [ name ~ ":"];
-	}
 }
 //$t0 に値を格納してみる
+
 private class Expr{
 	public this(){}
 	public void toOffset(){}
-	public string[] toMips(){return ["No Expr"];}
 	public override string toString () const { return null;}
 }
+
 private class VarExpr : Expr{
 	Var var;
 	public this(Var var){this.var = var;}
@@ -645,20 +673,16 @@ private class VarExpr : Expr{
 	public override void toOffset() {
 		var.searchToOffset();
 	}
-	public override string[] toMips(){		
-		return [var.LW(R.t0)];		
-	}
 }
+
 private class LitExpr : Expr{
 	int num;
 	public this (int num){this.num = num;}
 	public override string toString () const {
 		return "LitExpr " ~ num.to!string;
 	}
-	public override string[] toMips(){
-		return [Mips.li(R.t0,num)];
-	}
 }
+
 private class AopExpr : Expr{ // + - * /
 	string Op;
 	Var Left,Right;
@@ -674,24 +698,6 @@ private class AopExpr : Expr{ // + - * /
 		Left.searchToOffset();
 		Right.searchToOffset();
 	}
-	public override string[] toMips(){
-		string[] res = [
-			Left.LW(R.t1) ,
-			Right.LW(R.t2) 
-		];
-		final switch(Op){
-			case "+": return res ~ Mips.add(R.t0,R.t1,R.t2);			
-			case "-": return res ~ Mips.sub(R.t0,R.t1,R.t2);
-			case "*": return res ~ Mips.mul(R.t0,R.t1,R.t2);
-			case "/": return res ~ Mips.div(R.t0,R.t1,R.t2);
-			case "==":return res ~ Mips.seq(R.t0,R.t1,R.t2);
-			case "!=":return res ~ Mips.sne(R.t0,R.t1,R.t2);
-			case "<=":return res ~ Mips.sle(R.t0,R.t1,R.t2);
-			case ">=":return res ~ Mips.sge(R.t0,R.t1,R.t2);
-			case ">" :return res ~ Mips.sgt(R.t0,R.t1,R.t2);
-			case "<" :return res ~ Mips.slt(R.t0,R.t1,R.t2);
-		}
-	}
 }
 private class AddrExpr : Expr{ //&(a)
 	Var var;
@@ -704,9 +710,6 @@ private class AddrExpr : Expr{ //&(a)
 	public override void toOffset() {
 		var.searchToOffset();
 	}
-	public override string[] toMips(){
-		return [
-			Mips.addiu(R.t0,R.sp,var.ROffset),
-		];
-	}
 }
+
+

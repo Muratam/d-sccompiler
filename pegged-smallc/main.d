@@ -35,13 +35,13 @@ static if (!makeModule){
 		auto glob = new Global(g);
 		//glob.writeln;
 		glob.toOffset();
-		glob.toMipsCode().writeln;
-
+		new ToMips().toMipsCode(glob).writeln;
 	}
 }
 void main(string[] args){
 	static if (makeModule) asModule("smallc.sc","smallc/sc",scdefstr);
 	else {
+
 		if (args.length > 1) {
 			writeln("#analyze " ~ args[1]);
 			analyze(readText(args[1]));
@@ -52,7 +52,6 @@ void main(string[] args){
 }
 
 unittest{
-	writeln([new SCTree("aa"),null,new SCTree("aa"),null,null,null,new SCTree("aa")]);
 	[
 		//"int main(){print(111);print(444);}",
 		//"int d(){}int main(){print(111);d();print(444);}",
@@ -65,7 +64,6 @@ unittest{
 		"int fa(int n){	if(n == 0)return 1;else return n * fa(n-1);}int main(){ print(fa(4));}"
 		//"int a;int main(){a = 72;print(a);}",
 	].each!analyze;
-	"".writeln;
 }
 
 void sandbox(){
