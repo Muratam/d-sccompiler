@@ -122,76 +122,32 @@ class ToMips{
 }
 class ToOffset{
 	public this(Global g){toOffset(g);}
-	int MaxOffset = 0;
-	struct OffsetLevel {int offset,level;};
-	int ofs = 0,gpofs = 0;
-	OffsetLevel[][string] ofsNameTable,gpNameTable;
-	void initOfs(int startOffset = 0,bool clearOfsNameTable = true,bool clearGpNameTable = true){
-		MaxOffset = ofs = startOffset;
-		if (clearOfsNameTable) ofsNameTable.clear();
-		if (clearGpNameTable) gpNameTable.clear();
+	int MaxOffset = 0,offset = 0;
+	void init(int startOffset = 0){
+		MaxOffset = offset = startOffset;
 	}
-
 	void toOffset(Object o){
 		o.castSwitch!(
 			(Var a)=>{
-				ref int OFS(){return a.ptr == R.gp ? gpofs:ofs;}
-				ref auto NAMETABLE(){return a.ptr == R.gp ? gpNameTable : ofsNameTable;}
-				NAMETABLE()[a.name] ~= OffsetLevel(OFS,a.level);
-				a.name = "$" ~ OFS().to!string;
+				a.name = "$" ~ offset.to!string;
 				a.type = EType.Offset;
-				if(a.ptr != R.gp) MaxOffset = MaxOffset.max(OFS());
+				offset += 4;
+				MaxOffset = MaxOffset.max(offset);
 			}(),(Global a)=>{
-				initOfs(0,true,true);
+				init(0);
 				foreach(ref v;a.var_defs) toOffset(v.var);
 				foreach(ref f;a.fun_defs) toOffset(f);
 				a.offseted = true;
 			}(),(Fun_def a)=>{
-				initOfs(0,true,false);
+				init(0);
 				foreach(ref p;a.params) toOffset(p);
-				initOfs(8,false,false);
+				init(8);
 				toOffset(a.cmpdStmt);	
 				a.maxOffset = MaxOffset;
 			}(),(CmpdStmt a)=>{
 				foreach(ref v;a.vars)  toOffset(v.var);
 				foreach(ref s;a.stmts) toOffset(s);
-			}(),(AssignStmt a)=>{
-				searchToOffset(a.var);
-				toOffset(a.expr);
-			}(),(WriteMemStmt a)=>{
-				searchToOffset(a.dest);
-				searchToOffset(a.src);
-			}(),(ReadMemStmt a)=>{
-				searchToOffset(a.dest);
-				searchToOffset(a.src);
-			}(),(IfStmt a)=>{
-				searchToOffset(a.var);
-			}(),(ApplyStmt a)=>{
-				searchToOffset(a.dest);
-				foreach(ref v;a.args) searchToOffset(v);
-			}(),(ReturnStmt a)=>{
-				searchToOffset(a.var);
-			}(),(PrintStmt a)=>{
-				searchToOffset(a.var);
-			}(),(VarExpr a)=>{
-				searchToOffset(a.var);
-			}(),(AopExpr a)=>{
-				searchToOffset(a.Left);
-				searchToOffset(a.Right);
-			}(),(AddrExpr a)=>{
-				searchToOffset(a.var);
 			}(),(Object o)=>{}())();
-	}
-	void searchToOffset(Var v){
-		if(v.type == EType.Offset) return;
-		auto ref NAMETABLE (){return v.name in ofsNameTable ? ofsNameTable : gpNameTable;}
-		foreach_reverse(var;NAMETABLE()[v.name]){
-			if (var.level == v.level){
-				v.name = "$" ~ var.offset.to!string;
-				v.type = EType.Offset;
-				return;
-			}
-		}
 	}
 }
 
@@ -210,19 +166,20 @@ private class Var {
 		this.type = type;
 		this,ptr = ptr;
 	}
-	public static Var make(SCTree t,int level,R ptr = R.sp){
-		auto id = t.find("ID");
-		auto type = new SCType( t.find("Type_info"));
-		EType res = EType.Int;
-		if (type.type == "int *") res = EType.Intptr;
-		if (type.type == "int * *") res = EType.Intptrptr;
-		if (type.type == "void") res = EType.Void;
-		int arrayNum = 0;
-		if (t.has("array"))
-			arrayNum = t.find("array").elem.to!int;
-		return new Var(id.elem,res,level,arrayNum,ptr);
+	public this (SCTree t,int level,R ptr = R.sp){
+		this.type = 
+			new SCType(t.find("Type_info")).type.predSwitch(
+				"int *",EType.Intptr,
+				"int * *",EType.Intptrptr,
+				"void", EType.Void,
+				EType.Int);
+		this.name = t.find("ID").elem;
+		this.level = level;
+		if (t.has("array")) 
+			this.arrayNum = t.find("array").elem.to!int;
+		this.ptr = ptr;
 	}
-	public string toString() const {
+	public override string toString() const {
 		return "("
 			~ name ~ ":"
 			~ (ptr == R.sp ? "": ptr == R.fp ? "fp:":ptr == R.gp ? "gp:" : "!?")
@@ -249,7 +206,7 @@ class Global{
 		foreach(h;t){
 			switch(h.tag ){
 			case "Var_def":
-				var_defs ~= new Var_def(Var.make(h,0,R.gp));	
+				var_defs ~= new Var_def(new Var(h,0,R.gp));	
 				break;
 			case "Fun_def":
 				fun_defs ~= new Fun_def(h); 
@@ -305,10 +262,10 @@ private class Fun_def{
 	public this (SCTree t){
 		assert (t.tag  == "Fun_def");
 		auto declare = t.find("Fun_declare");
-		var = Var.make(declare,0);
+		var = new Var(declare,0);
 		if(declare.length > 2){
 			foreach(h;declare[2..$]){
-				params ~= (new Var_def(Var.make(h,1,R.fp))).var;
+				params ~= (new Var_def(new Var(h,1,R.fp))).var;
 			}
 		}
 		funlist ~= this;
@@ -476,7 +433,7 @@ private class CmpdStmt : Stmt{
 
 	void addStmt(SCTree t){
 		if(t.tag  == "Var_def"){
-			vars ~= new Var_def(Var.make(t,level));
+			vars ~= new Var_def(new Var(t,level));
 			return;
 		}
 		if (t.length == 0) return;

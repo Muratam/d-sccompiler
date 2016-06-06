@@ -53,7 +53,7 @@ void main(string[] args){
 
 unittest{
 	[
-		"int main(){print(111);print(444);}",
+		//"int main(){print(111);print(444);}",
 		//"int d(){}int main(){print(111);d();print(444);}",
 		//"int d(){print(112);}int main(){d();d();d();d();}",
 		//"int d(){print(112);}int main(){int i;for(i=0;i<10;i = i+1)d();}",
@@ -61,7 +61,7 @@ unittest{
 		//"int d(){if(0)return 72;return 11;}int main(){print(d());}",
 		//"int d(int n){return n;}int main(){print(d(12));}",
 		//"int sum(int a,int b,int c,int d){return a+b+c+d; } int main(){print(sum(1,2,3,4));}"
-		"int fa(int n){	if(n == 0)return 1;else return n * fa(n-1);}int main(){ print(fa(4));}",
+		//"int fa(int n){	if(n == 0)return 1;else return n * fa(n-1);}int main(){ print(fa(4));}",
 		"int a;int main(){a = 72;print(a);}",
 	].each!analyze;
 }
