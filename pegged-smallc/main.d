@@ -34,6 +34,7 @@ static if (!makeModule){
 		}
 		auto glob = new Global(g);
 		glob.writeln;
+		toGraphiz(glob);
 		new ToOffset(glob);
 		new ToMips().toMipsCode(glob).writeln;
 	}
@@ -41,7 +42,6 @@ static if (!makeModule){
 void main(string[] args){
 	static if (makeModule) asModule("smallc.sc","smallc/sc",scdefstr);
 	else {
-
 		if (args.length > 1) {
 			writeln("#analyze " ~ args[1]);
 			analyze(readText(args[1]));
@@ -51,18 +51,20 @@ void main(string[] args){
 	}
 }
 
+
 unittest{
 	[
 		//"int main(){print(111);print(444);}",
 		//"int d(){}int main(){print(111);d();print(444);}",
 		//"int d(){print(112);}int main(){d();d();d();d();}",
+		"int main(){int a,b;a=b=12;if(a == 0){print(a == 0 && 0);return a;}else b = a + 4; b = 1; return b;}",
 		//"int d(){print(112);}int main(){int i;for(i=0;i<10;i = i+1)d();}",
 		//"int d(){print(112);}int main(){int i;for(i=0;i<10;i = i+1){print(i);d();}}",
 		//"int d(){if(0)return 72;return 11;}int main(){print(d());}",
 		//"int d(int n){return n;}int main(){print(d(12));}",
-		//"int sum(int a,int b,int c,int d){return a+b+c+d; } int main(){print(sum(1,2,3,4));}"
+		//"int sum(int a,int b,int c,int d){return a+b+c+d; } int main(){print(sum(1,2,3,4));}",
 		//"int fa(int n){	if(n == 0)return 1;else return n * fa(n-1);}int main(){ print(fa(4));}",
-		"int a;int main(){a = 72;print(a);}",
+		//"int a;int main(){a = 72;print(a);}",
 	].each!analyze;
 }
 
