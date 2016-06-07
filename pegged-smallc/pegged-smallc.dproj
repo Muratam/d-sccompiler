@@ -57,6 +57,7 @@
     <Compile Include="pegged\tohtml.d" />
     <Compile Include="pegged\dynamic\grammar.d" />
     <Compile Include="pegged\dynamic\peg.d" />
+    <Compile Include="smallc\scintermediateclasses.d" />
   </ItemGroup>
   <ItemGroup>
     <None Include="pegged\dynamic\README.md" />

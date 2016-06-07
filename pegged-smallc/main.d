@@ -2,7 +2,7 @@ import pegged.grammar;
 import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv,std.file;
 import smallc.scdef,smallc.sctrim;
 import smallc.scsemanticanalysis,smallc.scintermediate;
-import smallc.scmips;
+import smallc.scmips,smallc.scintermediateclasses;
 
 //le3soft-staff@fos.kuis.kyoto-u.ac.jp / 最終報告 => 最終報告
 //sample ng1
@@ -57,7 +57,7 @@ unittest{
 		//"int main(){print(111);print(444);}",
 		//"int d(){}int main(){print(111);d();print(444);}",
 		//"int d(){print(112);}int main(){d();d();d();d();}",
-		"int main(){int a,b;a=b=12;if(a == 0){print(a == 0 && 0);return a;}else b = a + 4; b = 1; return b;}",
+		"int main(){int a,b;a=b=12;if(a == 0){print(a == 0 && 0);return a;}else {b = a + 4;if(a)b = 1;} return b;}",
 		//"int d(){print(112);}int main(){int i;for(i=0;i<10;i = i+1)d();}",
 		//"int d(){print(112);}int main(){int i;for(i=0;i<10;i = i+1){print(i);d();}}",
 		//"int d(){if(0)return 72;return 11;}int main(){print(d());}",
