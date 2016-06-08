@@ -33,108 +33,147 @@ print(y);
 // int main(){int x,y,z;x = 0;if(x){x = 13;} print (x);a0 = x + y;if(a0)print(z = x * y); }
 
 
-class Flow {
-	enum VarType{Indefine,Konst,Defined};
-	bool used = false; // => 使われなければまるまる消すことができる
-	public bool konst = false; //定数値なら
-	public int konstvalue = 0;
-	public this (){}
+//stmtsのflowTableを更新していくための仮想的なラベル付けブロック
+//toMipsの時点でそのFlowTableを見ながら最適なものを返すようにすればよいし、
+//これの上でフロー解析をしていけばよい
+class LabeledBlock{
+	string label;
+	string[] tos;
+	Stmt[] stmts;
+	public override string toString() {
+		return "[\n" 
+			~ label ~ " : \n" 
+			~ (tos.length == 0 ? "" : tos.map!`"->"~ a~ "\n"`.fold!"a~b")
+			~ "\n"
+			~ (stmts.length == 0 ? "" : stmts.map!(a=>a.toString()).fold!`a~"\n"~b`)
+			~ "\n]\n";
+	}
+	public this(string label,string[] tos = []){
+		this.label = label;
+		this.tos = tos;
+	}
+	static LabeledBlock[string] make(Global global){
+		LabeledBlock[string] blocks;
+		string current = "";
+		bool skip = false;
+		void registArrow(string to,string from = current){ 
+			if(from !in blocks)
+				blocks[from] = new LabeledBlock(from);			
+			if(!blocks[from].tos.canFind(to))
+				blocks[from].tos ~= to;
+		}
+		void registStmt(Stmt stmt,string name = current){
+			if (name !in blocks)
+				blocks[name] = new LabeledBlock(name);
+			blocks[name].stmts ~= stmt;
+		}
+		void genLabel(Object o){
+			if (skip && typeid(o) != typeid(LabelStmt)) return ;
+			o.castSwitch!(
+				(Global a)=>{			
+					foreach(b;a.fun_defs)genLabel(b);
+				}(),(Fun_def a)=>{
+					if(a.var.name == "print") return ;
+					current = a.var.name;
+					registArrow(current,"BEGIN");
+					genLabel(a.cmpdStmt);
+					if(current == a.var.name) registArrow("END"); 
+				}(),(CmpdStmt a)=>{
+					foreach(b;a.stmts) genLabel(b);
+				}(),(AssignStmt a)=>{ registStmt(a);
+				}(),(WriteMemStmt a)=>{ registStmt(a);
+				}(),(ReadMemStmt a)=>{ registStmt(a);
+				}(),(ApplyStmt a)=>{ registStmt(a);
+				}(),(PrintStmt a)=>{ registStmt(a);
+				}(),(IfStmt a)=>{
+					registArrow(a.trueLabel.label);
+					registArrow(a.elseLabel.label);
+					registStmt(a);
+					skip = true;
+				}(),(ReturnStmt a)=>{
+					registArrow("END");
+					registStmt(a);
+					skip = true;
+				}(),(GotoStmt a)=>{
+					registArrow(a.label);
+					skip = true;
+				}(),(LabelStmt a)=>{
+					if(!skip)registArrow(a.name);					
+					skip = false;
+					current = a.name;
+				}(),() => {}()
+				);
 
-}
-class TrimByDataFlow {
-	public this(Global g){
-
+		}
+		genLabel(global);
+		toGraphiz(blocks.values());
+		return blocks;
 	}
 
 
-}
-//`a[label="{a| fafe\l afefe\l }"];a -> b;`
-void toGraphiz(Global global){
-	string current = "";
-	auto startEnv = () =>  current ~ `[label="{` ~ current ~ "|";
-	auto endEnv   = () => `}"];`; 
-	string[] registedArrows = [];
-	bool skip = false;
-	void registArrow(string from,string to){
-		registedArrows ~= (from ~ "->" ~ to ~";");
+	string toGraphizNode(){
+		return 
+			label 
+				~ `[label="{` ~ label ~`|` 
+				~ (stmts.length == 0 ? "" : stmts.map!(a=>toGraphizNode(a)).fold!"a~b" )
+				~ `}"];` 
+				~ (tos.length == 0 ? ""  : tos.map!(a=>label~ "->" ~ a ~ ";").fold!`a~b`);
 	}
-	string genCode(Object o){
-		if (skip && typeid(o) != typeid(LabelStmt)) return "";
+	string toGraphizNode(Object o){
+		// no goto and label stmts
 		return o.castSwitch!(
-			(Var a)=>{
-				return a.name.replace("#","_");
-			}(),(Global a)=>{
-				return a.fun_defs.map!genCode.fold!"a~b";
-			}(),(Fun_def a)=>{
-				if(a.var.name == "print") return "";
-				current = genCode(a.var);
-				registArrow("BEGIN",current);
-				return startEnv() ~ genCode(a.cmpdStmt) ~ endEnv();
-			}(),(CmpdStmt a)=>{
-				return a.stmts.map!genCode.fold!"a~b";
+			(CmpdStmt a)=>{
+				return a.stmts.map!(a=>toGraphizNode(a)).fold!"a~b";
 			}(),(AssignStmt a)=>{
-				return genCode(a.var) ~ " = " ~ genCode(a.expr) ~ `\l`;
+				return a.var.name ~ " = " ~ toGraphizNode(a.expr) ~ `\l`;
 			}(),(WriteMemStmt a)=>{
-				return "";
+				return "* " ~ a.dest.name ~ " = " ~ a.src.name ~ `\l`;
 			}(),(ReadMemStmt a)=>{
-				return "";
+				return a.dest.name ~ " = &" ~ a.src.name ~ `\l`;
 			}(),(IfStmt a)=>{
-				registArrow(current,a.trueLabel.label);
-				registArrow(current,a.elseLabel.label);
-				auto ifVal = genCode(a.var);
-				skip = true;
 				return "if "
-					~ ifVal ~ " : "
+					~ a.var.name ~ " : "
 					~ a.trueLabel.label ~ " : " 
 					~ a.elseLabel.label ~ `\l`;
-			}(),(GotoStmt a)=>{
-				if(skip) return "";
-				registArrow(current,a.label);
-				skip = true;
-				return "";
 			}(),(ApplyStmt a)=>{
-				return genCode(a.target) ~ `()\l`;
+				return a.target.name ~ `()\l`;
 			}(),(PrintStmt a)=>{
-				return "print " ~ genCode(a.var) ~ `\l`;
+				return "print " ~ a.var.name ~ `\l`;
 			}(),(ReturnStmt a)=>{
-				registArrow(current,"END");
-				auto returnVal = genCode(a.var);
-				skip = true;
-				return "return " ~ returnVal ~ `\l`;
-			}(),(LabelStmt a)=>{
-				if(!skip)registArrow(current,a.name);					
-				skip = false;
-				current = a.name;
-				return endEnv() ~ startEnv();
+				return "return " ~ a.var.name ~ `\l`;
 			}(),(VarExpr a)=>{
-				return genCode(a.var);
+				return a.var.name;
 			}(),(LitExpr a)=>{
 				return a.num.to!string;
 			}(),(AopExpr a)=>{
-				return "(" ~ genCode(a.Left) ~" "~ a.Op ~" "~ genCode(a.Right) ~ ")";
+				auto op = a.Op.replace("<","＜").replace(">","＞");
+				return "(" ~ a.Left.name ~" "~ op ~" "~ a.Right.name ~ ")";
 			}(),(AddrExpr a)=>{
-				return "* " ~ genCode(a.var);
+				return "* " ~ a.var.name;
 			}(),() => ""
 			);
 	}
-	auto code = 
-		"digraph flow{ node [shape = record];" 
-		~ genCode(global).replace(endEnv()~endEnv(),endEnv())
-		~ registedArrows.fold!"a~b"
-		~ "}";
-	("# " ~ code).writeln;
-	mkGraphiz(code,"flow.png");
+	public static void toGraphiz(LabeledBlock[] blocks){
+		auto code = 
+			`digraph flow{ node [shape = record];`
+			~ blocks.map!(a=>a.toGraphizNode()).fold!`a~b` 
+			~ `}`;
+		//("# " ~ code).writeln;
+		mkGraphiz(code,"flow.png");
+	}
+	public static void mkGraphiz(string code = "digraph f{a->b}", string graphName = "graph.png"){
+		import std.process;
+		executeShell(
+			escapeShellCommand("echo",code.replace("\n","").replace("\t","")) 
+			~ "|" ~ 
+			escapeShellCommand("dot","-Tpng", "-o",graphName) 
+			~ ";" ~
+			escapeShellCommand("open",graphName) 
+			);
+	}
+
 }
-void mkGraphiz(string code = "digraph f{a->b}", string graphName = "graph.png"){
-	import std.process;
-	executeShell(
-		escapeShellCommand("echo",code.replace("\n","").replace("\t","")) 
-		~ "|" ~ 
-		escapeShellCommand("dot","-Tpng", "-o",graphName) 
-		~ ";" ~
-		escapeShellCommand("open",graphName) 
-		);
-}
+
 
 
 class ToMips{

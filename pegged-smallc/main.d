@@ -32,11 +32,11 @@ static if (!makeModule){
 			"Using Illegal Semantics !!!".writeln;
 			return;
 		}
-		auto glob = new Global(g);
-		glob.writeln;
-		toGraphiz(glob);
-		new ToOffset(glob);
-		new ToMips().toMipsCode(glob).writeln;
+		auto global = new Global(g);
+		global.writeln;
+		LabeledBlock.make(global);
+		new ToOffset(global);
+		new ToMips().toMipsCode(global).writeln;
 	}
 }
 void main(string[] args){
@@ -56,8 +56,8 @@ unittest{
 	[
 		//"int main(){print(111);print(444);}",
 		//"int d(){}int main(){print(111);d();print(444);}",
-		//"int d(){print(112);}int main(){d();d();d();d();}",
-		"int main(){int a,b;a=b=12;if(a == 0){print(a == 0 && 0);return a;}else {b = a + 4;if(a)b = 1;} return b;}",
+		//"int d(){print(112);}int main(){d();d();}",
+		"void d(){print(123);}int main(){int a,b;a=b=12;d();if(a == 0){print(a == 0 && 0);return a;}else {int i;for(i=0;i<10;i = i + 1)print(i);} return b;}",
 		//"int d(){print(112);}int main(){int i;for(i=0;i<10;i = i+1)d();}",
 		//"int d(){print(112);}int main(){int i;for(i=0;i<10;i = i+1){print(i);d();}}",
 		//"int d(){if(0)return 72;return 11;}int main(){print(d());}",

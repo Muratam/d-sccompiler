@@ -358,7 +358,38 @@ class CmpdStmt : Stmt{
 	
 }
 class Stmt {
-	public override string toString() const{return null;}
+	public override string toString() const {return "";}
+	public struct Flow {
+		bool used = false; // => 不要代入文除去
+		enum FlowType{
+			Undefined,
+			Konst, //定数値畳み込み
+			OtherVar, // コピー伝播
+			Any,
+		};
+		FlowType flowType = FlowType.Undefined;
+		
+		void toKonst(int lit){
+			if(this.flowType == FlowType.Undefined){
+				this.flowType = flowType.Konst;
+				konstValue = lit;
+				return;
+			}else{
+				
+			}
+		}
+		int konstValue = 0;
+		Var otherVar = null;
+		string toString() {
+			return flowType.predSwitch(
+				FlowType.Undefined,"?",
+				FlowType.Konst,konstValue.to!string,
+				FlowType.OtherVar,otherVar.name,
+				FlowType.Any,"Any"
+				);
+		}
+	}
+	public Flow[string] flowTable;
 }
 class AssignStmt : Stmt{ 
 	public Var var;
