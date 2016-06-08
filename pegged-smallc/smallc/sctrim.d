@@ -2,6 +2,8 @@ module smallc.sctrim;
 import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv;
 import pegged.grammar;
 
+//envなどを含むクラスにする
+
 //trimExpr         : Expr系の トリミング
 //trim : 整形 =>
 //      Stmts : [Var_def*,Stmt*]
@@ -13,256 +15,273 @@ import pegged.grammar;
 //      Array : a[b] => *(a + b)
 //         -a : 0 - a 
 
-struct SCTree {
-	string tag = ""; 
-	int begin = 0, end = 0;
-	string val = ""; 
-	SCTree[] hits = [];
-	bool isLeaf (){return hits.length == 0 ;}
-	bool isDummyLeaf(){return tag == "#dummy";}
-	static SCTree dummyLeaf (){ return SCTree("#dummy");}
-	string toString(string tabs = "")const {
-		string mayval = val == "" ? "" : "{ " ~ val ~ " }";
-		string res = tag ~":" ~mayval~ " "~ to!string([begin, end])~"\n";
-        string hitsString;     
-        foreach(i,child; hits){
-            hitsString ~= tabs ~ " +-" ~ child.toString(tabs ~ ((i<hits.length -1)?" | " : "   "));
-        }
+class SCTree{
+	public int begin = 0, end = 0;
+	public string elem = ""; 
+	public string tag = ""; 
+	protected SCTree[] hits = []; //called by []
+	public bool isLeaf (){return hits.length == 0 ;}
+	public SCTree opIndex(size_t i) { return hits[i];}
+	public SCTree opIndexAssign(SCTree value,size_t i){return hits[i] = value;}
+	public ref SCTree[] opSlice(){return hits;}
+	public SCTree[] opSliceAssign(SCTree[] value){return hits = value;}
+	public SCTree[] opSlice(size_t x,size_t y){return hits[x..y];}
+	public size_t opDollar(){return hits.length; }
+	@property public size_t length(){return hits.length;}
+	public SCTree[] opOpAssign(string op)(SCTree rhs){ // ~= のみ： ~ は曖昧性のため存在しない
+		static if(op == "~") {hits ~= rhs;return hits; } 
+		else static assert(0,"no operator" ~ op);
+	}
+
+	public override string toString() {return toString("");}
+	public string toString(string tabs)const {
+		string mayelem = elem == "" ? "" : "{ " ~ elem ~ " }";
+		string res = tag ~":" ~mayelem~ " "~ to!string([begin, end])~"\n";
+		string hitsString;     
+		foreach(i,child; hits){
+			hitsString ~= tabs ~ " +-" ~ child.toString(tabs ~ ((i<hits.length -1)?" | " : "   "));
+		}
 		return res ~ hitsString;
 	}
-	this (string tag ,int begin = 0,int end = 0,string val = "",SCTree[] hits = cast(SCTree[])[]){
+	public this (string tag ,int begin = 0,int end = 0,string elem = "",SCTree[] hits = cast(SCTree[])[]){
 		this.tag = tag;
 		this.begin = begin;
 		this.end = end;			
-		this.val = val;
+		this.elem = elem;
 		this.hits = hits;
 	}
-	SCTree makeLeaf(string tag = null,string val = null){
-		return SCTree(tag == null ? this.tag:tag,this.begin,this.end,val == null ? this.val:val);
+	public SCTree makeLeaf(string tag = null,string elem = null){
+		return new SCTree(tag == null ? this.tag:tag,this.begin,this.end,elem == null ? this.elem:elem);
 	}
-	SCTree searchByTag(string tag){
+	public SCTree find(string tag){
 		assert(tag != "");
 		if(tag == this.tag) return this;
 		foreach(h;hits) {
-			auto searched = h.searchByTag(tag);
+			auto searched = h.find(tag);
 			if(searched.tag != "") return searched;
 		}
-		return SCTree("");
+		return new SCTree("");
 	}
-	SCTree searchByVal(string val){
-		assert(val != "");
-		if(val == this.val) return this;
+	public SCTree findElem(string elem){
+		assert(elem != "");
+		if(elem == this.elem) return this;
 		foreach(h;hits) {
-			auto searched = h.searchByVal(val);
-			if(searched.val != "") return searched;
+			auto searched = h.findElem(elem);
+			if(searched.elem != "") return searched;
 		}
-		return SCTree("",0,0,"");
+		return new SCTree("",0,0,"");
 	}
-	bool canFindByTag(string tag){
+	public bool has(string tag){
 		if (tag == this.tag)return true;
 		foreach(h;hits){
-			if (h.canFindByTag(tag)) return true;
+			if (h.has(tag)) return true;
 		}
 		return false;
 	}
-	bool canFindByVal(string val){
-		if (val == this.val)return true;
+	public bool hasElem(string elem){
+		if (elem == this.elem)return true;
 		foreach(h;hits){
-			if (h.canFindByVal(val)) return true;
+			if (h.hasElem(elem)) return true;
 		}
 		return false;
 	}
-	this (ParseTree p){
+	public this (ParseTree p){
 		begin = cast(int)p.begin;
 		end = cast(int)p.end;
 		tag = p.name.startsWith("SC.") ? p.name[3..$]:p.name; //remove SC. 
-		if (p.children.length == 0) val = p.matches[0];
-		foreach(c;p.children)hits ~= SCTree(c);
+		if (p.children.length == 0) elem = p.matches[0];
+		foreach(c;p.children)hits ~= new SCTree(c);
 	}
+	public bool writeError(string str){
+		writeln(str ~ " [" ~ begin.to!string ~ "," ~ end.to!string ~ "]");
+		return false;
+	}
+	private SCTree makeTypeInfo(SCTree type,bool ptr = false,string arrayNum = ""){
+		auto res = makeLeaf("Type_info","");
+		res ~= makeLeaf(type.tag,type.elem);
+		if(ptr) res ~= makeLeaf("ptr","ptr");
+		if(arrayNum != "")res ~= makeLeaf("array",arrayNum);
+		return res;
+	}
+	private SCTree makeDummyStmt(){
+		auto res = makeLeaf("Stmt","");
+		res.elem = "";
+		res ~= makeLeaf("literal",";");
+		return res;
+	}
+	private SCTree makeDummyExpr(){
+		auto res = makeLeaf("Expr","");
+		res.elem = "";
+		res ~= makeLeaf("NUM","1");
+		return res;
+	}
+	//Expr式をトリミング
+	public void trimExpr(){
+		const newTag = "Expr";
+		const exprs = [
+			"Expr","EB00","EB01","EB02","EB03","EB04","EB05","EB06", 
+			"Postfix_expr","Unary_expr","Primary_expr",
+		];
+		if (exprs.canFind(tag)){
+			tag = newTag;
+			while(hits.length == 1 && exprs.canFind(this[0].tag)){
+				this[] = this[0][];
+			}
+		}
+		foreach(ref h;this[]) h.trimExpr();
+	}
+	private SCTree parseFor(ref int semi,string separator){
+		if (this[semi].elem == separator){
+			semi ++; 
+			return makeDummyExpr();
+		} else {
+			semi += 2;
+			return this[semi-2];
+		}
+	}	
 
-}
-private SCTree makeTypeInfo(SCTree base,SCTree type,bool ptr = false,string arrayNum = ""){
-	auto res = base.makeLeaf("Type_info","");
-	res.hits ~= base.makeLeaf(type.tag,type.val);
-	if(ptr) res.hits ~= base.makeLeaf("ptr","ptr");
-	if(arrayNum != "")res.hits ~= base.makeLeaf("array",arrayNum);
-	return res;
-}
-private SCTree dummyStmt(SCTree base){
-	auto res = base.makeLeaf("Stmt","");
-	res.val = "";
-	res.hits ~= base.makeLeaf("literal",";");
-	return res;
-}
-private SCTree dummyExpr(SCTree base){
-	auto res = base.makeLeaf("Expr","");
-	res.val = "";
-	res.hits ~= base.makeLeaf("NUM","1");
-	return res;
-}
-
-//Expr式をトリミング
-private void trimExpr(ref SCTree t){
-	const newTag = "Expr";
-	const exprs = [
-		"Expr","EB00","EB01","EB02","EB03","EB04","EB05","EB06", 
-		"Postfix_expr","Unary_expr","Primary_expr",
-	];
-	if (exprs.canFind(t.tag)){
-		t.tag = newTag;
-		while(t.hits.length == 1 && exprs.canFind(t.hits[0].tag)){
-			t.hits = t.hits[0].hits;
+	private void trimThis(){
+		if (tag.startsWith("literal!"))tag = "literal";
+		switch(tag){
+		case "Stmts": 
+			this[] = this[1..$];
+			return;			
+		case "Fun_declare":
+			SCTree[] newHits;
+			auto type = this[0];
+			auto isPtr = this[1].hasElem("*");
+			newHits ~= makeTypeInfo(type,isPtr);
+			newHits ~= this[1].find("ID");
+			if(length > 2){
+				foreach(h;this[2..$]){
+					auto newParam = h.makeLeaf();
+					auto ptype = h.find("Type");
+					auto pid = h.find("ID");
+					auto pisPtr = h.hasElem("*");
+					newParam ~= h.makeTypeInfo(ptype,pisPtr);
+					newParam ~= pid;
+					newHits ~= newParam;
+				}		
+			}
+			this[] = newHits;
+			return;	
+		case "Stmt":
+			switch(this[0].elem){
+			case "if":
+				if (length == 3){
+					this ~= this[0].makeLeaf("Stmt","");
+					this[3].elem = "";
+					this[3] ~= this[0].makeLeaf("literal",";");
+				}
+				return;		
+			case "for":
+				SCTree[] newHits ;
+				int semi = 1;
+				newHits ~= this[0];
+				newHits ~= parseFor(semi,";");
+				newHits ~= parseFor(semi,";");
+				newHits ~= parseFor(semi,")");
+				newHits ~= this[semi];
+				this[] = newHits;
+				return;		
+			case "while":
+				SCTree[] newHits;
+				newHits ~= this[0];
+				newHits[0].elem = "for";
+				newHits ~= makeDummyExpr();
+				newHits ~= this[1];
+				newHits ~= makeDummyExpr();
+				newHits ~= this[2];
+				this[] = newHits;
+				return;		
+			default : return;
+			}	
+		case "Expr":				
+			if(length != 2) return;
+			switch(this[0].elem){
+			case "-":
+				SCTree[] newHits;
+				newHits ~= makeLeaf("Expr");
+				newHits[0] ~= makeLeaf("NUM","0");
+				newHits ~= this[0];
+				newHits ~= this[1];
+				this[] = newHits;
+				return;
+			default :return;
+			}
+		default:return;
 		}
 	}
-	foreach(ref h;t.hits) trimExpr(h);
-}
-private SCTree parseFor(SCTree t,ref int semi,string separator){
-	if (t.hits[semi].val == separator){
-		semi ++; 
-		return dummyExpr(t);
-	} else {
-		semi += 2;
-		return t.hits[semi-2];
-	}
-}	
-
-private void trimThis(ref SCTree t){
-	if (t.tag.startsWith("literal!"))t.tag = "literal";
-	switch(t.tag){
-	case "Stmts": 
-		t.hits = t.hits[1..$];
-		return;			
-	case "Fun_declare":
+	private void trimHits(){
 		SCTree[] newHits;
-		auto type = t.hits[0];
-		auto isPtr = t.hits[1].canFindByVal("*");
-		newHits ~= makeTypeInfo(t,type,isPtr);
-		newHits ~= t.hits[1].searchByTag("ID");
-		if(t.hits.length > 2){
-			foreach(h;t.hits[2..$]){
-				auto newParam = h.makeLeaf();
-				auto ptype = h.searchByTag("Type");
-				auto pid = h.searchByTag("ID");
-				auto pisPtr = h.canFindByVal("*");
-				newParam.hits ~= makeTypeInfo(h,ptype,pisPtr);
-				newParam.hits ~= pid;
-				newHits ~= newParam;
-			}		
-		}
-		t.hits = newHits;
-		return;	
-	case "Stmt":
-		switch(t.hits[0].val){
-		case "if":
-			if (t.hits.length == 3){
-				t.hits ~= t.hits[0].makeLeaf("Stmt","");
-				t.hits[3].val = "";
-				t.hits[3].hits ~= t.hits[0].makeLeaf("literal",";");
+		foreach(h;this[]){
+			switch(h.tag){
+			case "Var_def":
+				auto type = h[0];
+				foreach(hh;h[1..$]){
+					auto H = h.makeLeaf();
+					bool isPtr = hh.hasElem("*");
+					string isArray = hh.find("NUM").elem;
+					H ~= h.makeTypeInfo(type,isPtr,isArray);	
+					H ~= hh.find("ID");
+					newHits ~= H;
+				}
+				break;		
+			case "Array":
+				newHits ~= h.makeLeaf("literal","*");
+				auto expr = h.makeLeaf("Expr", "");
+				expr.elem = "";
+				expr ~= h[0];
+				expr ~= h.makeLeaf("literal","+");
+				expr ~= h[1];
+				newHits ~= expr;
+				break;	
+			default: 
+				newHits ~= h;
+				break;
 			}
-			return;		
-		case "for":
-			SCTree[] newHits ;
-			int semi = 1;
-			newHits ~= t.hits[0];
-			newHits ~= t.parseFor(semi,";");
-			newHits ~= t.parseFor(semi,";");
-			newHits ~= t.parseFor(semi,")");
-			newHits ~= t.hits[semi];
-			t.hits = newHits;
-			return;		
-		case "while":
-			SCTree[] newHits;
-			newHits ~= t.hits[0];
-			newHits[0].val = "for";
-			newHits ~= dummyExpr(t);
-			newHits ~= t.hits[1];
-			newHits ~= dummyExpr(t);
-			newHits ~= t.hits[2];
-			t.hits = newHits;
-			return;		
-		default : return;
-		}	
-	case "Expr":
-		
-		if(t.hits.length != 2) return;
-		switch(t.hits[0].val){
-		case "-":
-			SCTree[] newHits;
-			newHits ~= t.makeLeaf("Expr");
-			newHits[0].hits ~= t.makeLeaf("NUM","0");
-			newHits ~= t.hits[0];
-			newHits ~= t.hits[1];
-			t.hits = newHits;
-			return;
-		default :return;
 		}
-	default:return;
+		this[] = newHits;
 	}
-}
-private void trimHits(ref SCTree t){
-	SCTree[] newHits;
-	foreach(h;t.hits){
-		switch(h.tag){
-		case "Var_def":
-			auto type = h.hits[0];
-			foreach(hh;h.hits[1..$]){
-				auto H = h.makeLeaf();
-				bool isPtr = hh.canFindByVal("*");
-				string isArray = hh.searchByTag("NUM").val;
-				H.hits ~= makeTypeInfo(h,type,isPtr,isArray);	
-				H.hits ~= hh.searchByTag("ID");
-				newHits ~= H;
-			}
-			break;		
-		case "Array":
-			newHits ~= h.makeLeaf("literal","*");
-			auto expr = h.makeLeaf("Expr", "");
-			expr.val = "";
-			expr.hits ~= h.hits[0];
-			expr.hits ~= h.makeLeaf("literal","+");
-			expr.hits ~= h.hits[1];
-			newHits ~= expr;
-			break;	
-		default: 
-			newHits ~= h;
-			break;
-		}
-	}
-	t.hits = newHits;
-}
-private void trimHits2(ref SCTree t){
-	SCTree[] newHits;
-	foreach(h;t.hits){
-		switch(h.tag){
-		case "Expr":
-			if(h.hits.length == 2 
-				&& h.hits[0].val == "&"
-				&& h.hits[1].hits.length == 2 
-				&& h.hits[1].hits[0].val == "*"){
-					newHits ~= h.hits[1].hits[1];
+	private void trimHits2(){
+		SCTree[] newHits;		
+		foreach(h;this[]){
+			switch(h.tag){
+			case "Expr":
+				if(h.length == 2 
+					&& h[0].elem == "&" 
+					&& h[1].length == 2 
+					&& h[1][0].elem == "*"){
+					newHits ~= h[1][1];
 					break;
+				}
+				goto default;
+			default: 
+				newHits ~= h;
+				break;
 			}
-		default: 
-			newHits ~= h;
-			break;
 		}
+		this[] = newHits;
 	}
-	t.hits = newHits;
-}
-//整形
-private void trim(ref SCTree t){
-	trimThis(t);
-	trimHits(t);
-	foreach(ref h;t.hits){trim(h);}
-}
-private void trim2(ref SCTree t){
-	trimHits2(t);
-	foreach(ref h;t.hits){trim2(h);}
+
+	//整形	
+	private void trim(){
+		trimThis();
+		trimHits();
+		foreach(ref h;this[])h.trim();
+	}
+	private void trim2(){
+		trimHits2();
+		foreach(ref h;this[])h.trim2();
+	}
+	
+	public bool tryTrim(){	
+		trimExpr();
+		trim();
+		trim2();
+		return true;
+	}
+
 }
 
-bool tryTrim(ref SCTree t){	
-	trimExpr(t);
-	trim(t);
-	trim2(t);
-	return true;
-}
+
