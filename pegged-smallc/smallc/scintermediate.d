@@ -5,41 +5,14 @@ import smallc.scdef,smallc.sctrim,smallc.scsemanticanalysis;
 import smallc.scmips;
 import smallc.scintermediateclasses;
 /+
-
-## 定数畳み込み
-x=3; y=x+2; print(y); 
-=> x=3;y=5;print(5);
-## コピー伝播
-y=z;x=y;print(x);print(z);
-  => y=z;x=y;print(z);print(z);
-## 無駄な代入の削除
-x=3;y=5;print(5);=>print(5);
-x=y;y=z;print(z);print(z);=>print(z);print(z);
-
-# データフローを解析することで可能
-## 到達可能定義解析
-x=3;     :x
-y=x*2;   :y
-x=4;     :x
-print(y);
-## 到達可能定義解析
-## 到達コピー解析
-## 生存変数解析
+implement withpointerfunction
 
 +/
-//Global => TrimByDataFlow => ToOffset => ToMips
-//int x,y; x = 3; print(x); x = 10; print(x);
-// => int x;print(3);print(10);
-// int main(){int x,y,z;x = 0;if(x){x = 13;} print (x);a0 = x + y;if(a0)print(z = x * y); }
-
-
-//stmtsのflowTableを更新していくための仮想的なラベル付けブロック
-//toMipsの時点でそのFlowTableを見ながら最適なものを返すようにすればよいし、
-//これの上でフロー解析をしていけばよい
 class LabeledBlock{
 	string label;
 	string[] tos;
 	Stmt[] stmts;
+	static bool[string] withNoPtrFunctionMap;
 	public override string toString() {
 		return "[\n" 
 			~ label ~ " : \n" 
@@ -52,7 +25,8 @@ class LabeledBlock{
 		this.label = label;
 		this.tos = tos;
 	}
-	static LabeledBlock[string] make(Global global){
+	static void analyze(Global global){
+		withNoPtrFunctionMap = global.withNoPtrFunctionMap.dup;
 		LabeledBlock[string] blocks;
 		string current = "";
 		bool skip = false;
@@ -61,6 +35,8 @@ class LabeledBlock{
 				blocks[from] = new LabeledBlock(from);			
 			if(!blocks[from].tos.canFind(to))
 				blocks[from].tos ~= to;
+			if(to !in blocks)
+				blocks[to] = new LabeledBlock(to);
 		}
 		void registStmt(Stmt stmt,string name = current){
 			if (name !in blocks)
@@ -68,16 +44,24 @@ class LabeledBlock{
 			blocks[name].stmts ~= stmt;
 		}
 		void genLabel(Object o){
-			if (skip && typeid(o) != typeid(LabelStmt)) return ;
+			if (skip 
+				&& (typeid(o) != typeid(LabelStmt) 
+				&& typeid(o) != typeid(Fun_def))) {
+				o.castSwitch!((Stmt s)=>{s.skipped = true;}());
+				return ;
+			}
 			o.castSwitch!(
 				(Global a)=>{			
-					foreach(b;a.fun_defs)genLabel(b);
+					foreach(ref b;a.fun_defs){
+						genLabel(b);
+					}
 				}(),(Fun_def a)=>{
+					skip = false;
 					if(a.var.name == "print") return ;
 					current = a.var.name;
 					registArrow(current,"BEGIN");
 					genLabel(a.cmpdStmt);
-					if(current == a.var.name) registArrow("END"); 
+					registArrow("END"); 
 				}(),(CmpdStmt a)=>{
 					foreach(b;a.stmts) genLabel(b);
 				}(),(AssignStmt a)=>{ registStmt(a);
@@ -107,9 +91,8 @@ class LabeledBlock{
 		}
 		genLabel(global);
 		toGraphiz(blocks.values());
-		return blocks;
+		global.usedMap =  analyze(blocks);
 	}
-
 
 	string toGraphizNode(){
 		return 
@@ -122,9 +105,7 @@ class LabeledBlock{
 	string toGraphizNode(Object o){
 		// no goto and label stmts
 		return o.castSwitch!(
-			(CmpdStmt a)=>{
-				return a.stmts.map!(a=>toGraphizNode(a)).fold!"a~b";
-			}(),(AssignStmt a)=>{
+			(AssignStmt a)=>{
 				return a.var.name ~ " = " ~ toGraphizNode(a.expr) ~ `\l`;
 			}(),(WriteMemStmt a)=>{
 				return "* " ~ a.dest.name ~ " = " ~ a.src.name ~ `\l`;
@@ -136,7 +117,7 @@ class LabeledBlock{
 					~ a.trueLabel.label ~ " : " 
 					~ a.elseLabel.label ~ `\l`;
 			}(),(ApplyStmt a)=>{
-				return a.target.name ~ `()\l`;
+				return a.dest.name ~ " = " ~ a.target.name ~ `()\l`;
 			}(),(PrintStmt a)=>{
 				return "print " ~ a.var.name ~ `\l`;
 			}(),(ReturnStmt a)=>{
@@ -153,7 +134,8 @@ class LabeledBlock{
 			}(),() => ""
 			);
 	}
-	public static void toGraphiz(LabeledBlock[] blocks){
+	static void toGraphiz(LabeledBlock[] blocks){
+		if(blocks.length == 0) return;
 		auto code = 
 			`digraph flow{ node [shape = record];`
 			~ blocks.map!(a=>a.toGraphizNode()).fold!`a~b` 
@@ -161,7 +143,7 @@ class LabeledBlock{
 		//("# " ~ code).writeln;
 		mkGraphiz(code,"flow.png");
 	}
-	public static void mkGraphiz(string code = "digraph f{a->b}", string graphName = "graph.png"){
+	static void mkGraphiz(string code = "digraph f{a->b}", string graphName = "graph.png"){
 		import std.process;
 		executeShell(
 			escapeShellCommand("echo",code.replace("\n","").replace("\t","")) 
@@ -171,10 +153,158 @@ class LabeledBlock{
 			escapeShellCommand("open",graphName) 
 			);
 	}
+	static string[] analyze(LabeledBlock[string] blocks){
+		recursiveAnalyze(blocks["BEGIN"],blocks);
+		bool[string] usedMap; 
+		bool[string] varMap;
+		foreach(block;blocks){
+			//block.label.writeln;
+			foreach(stmt;block.stmts){
+				//stmt.inTable.writeln;
+				foreach(key;stmt.outTable.keys){
+					if(stmt.outTable[key].used){
+						usedMap[key] = true;
+					}
+					varMap[key] = true;
+				}
+			}
+		}
+		//usedMap.keys.writeln;
+		//varMap.keys.writeln;
+		return usedMap.keys;
+	}
+	static void recursiveAnalyze(LabeledBlock block,LabeledBlock[string] blocks,Flow[string] flowTable = ["":Flow(Flow.FlowType.Any)]){
+		//flowTable.writeln(": recursive");
+		//block.label.writeln;
+		auto outTable = block.analyzeSelf(flowTable);
+		if (outTable == null) return;
+		foreach(to;block.tos){
+			//to.writeln(": to");
+			if(to != "END")
+				recursiveAnalyze(blocks[to],blocks,outTable);
+		}
+	}
+
+	Flow[string]  analyzeSelf(Flow[string] flowTable){
+		if(stmts.length > 0 ){
+			//this.label.writeln;
+			if( flowTable.values.length > 0 &&
+				flowTable.values == stmts[0].inTable.values
+				&& flowTable.keys == stmts[0].inTable.keys){ 
+				"return same".writeln;
+				return null;
+			}
+		}
+		foreach(stmt;stmts){
+			flowTable = analyzeStmt(stmt,flowTable);
+			//stmt.outTable.writeln;
+		}
+		return flowTable;
+	}
+
+	static int calc(int l,int r,string op){
+		return op.predSwitch(
+			"+",l + r,
+			"-",l - r,
+			"*",l * r,
+			"/",l / r,
+			"<",l < r,
+			">",l > r,
+			"<=",l <= r ? 1:0,
+			">=",l >= r ? 1:0,
+			"==",l == r ? 1:0,
+			"!=",l != r ? 1:0,
+			);
+	}
+
+	static Flow[string] analyzeStmt(Stmt stmt,Flow[string] flowTable){
+		stmt.inTable = flowTable.dup();
+		stmt.outTable = flowTable.dup();
+		void recursiveUsed(string name){
+			if (name !in stmt.outTable) {
+				stmt.outTable[name] = Flow(Flow.FlowType.Any);
+			}
+			with (stmt.outTable[name]){
+				switch(flowType){
+					case Flow.FlowType.Konst:
+						break;
+					case Flow.FlowType.OtherVar:
+						used = true;				
+						if(otherVar != "") recursiveUsed(otherVar);
+						break;
+					case Flow.FlowType.Any:
+						used = true;				
+						if(dependR != "") recursiveUsed(dependR);
+						if(dependL != "") recursiveUsed(dependL);
+						break;
+					default:break;
+				}
+			}
+		}
+
+		stmt.castSwitch!(
+			(AssignStmt s)=>{
+				s.outTable[s.var.name] = 
+					s.expr.castSwitch!(
+						(VarExpr a)=> {
+							if(a.var.name !in s.inTable)
+								return Flow(Flow.FlowType.OtherVar,a.var.name);
+							else {
+								if(s.var.name in s.outTable ){
+									if(s.outTable[s.var.name].flowType != Flow.FlowType.OtherVar
+										|| s.outTable[s.var.name].otherVar != a.var.name)
+										return Flow(Flow.FlowType.Any);
+								}
+								return s.inTable[a.var.name];						
+							}
+						}(),(LitExpr a)=> {
+							if(s.var.name in s.outTable ){
+								if(s.outTable[s.var.name].flowType != Flow.FlowType.Konst
+									|| s.outTable[s.var.name].konstValue != a.num)
+									return Flow(Flow.FlowType.Any);
+							}
+							return Flow(Flow.FlowType.Konst,a.num);
+						}(),(AopExpr a)=> {
+							if(a.Left.name !in s.inTable
+								|| a.Right.name !in s.inTable
+								|| s.inTable[a.Left.name].flowType != Flow.FlowType.Konst
+								|| s.inTable[a.Right.name].flowType != Flow.FlowType.Konst)
+								return Flow(Flow.FlowType.Any,a.Right.name,a.Left.name);
+							else return Flow(Flow.FlowType.Konst,calc(							
+									s.inTable[a.Left.name].konstValue								
+									,s.inTable[a.Right.name].konstValue
+									,a.Op));
+						}(),(AddrExpr a)=>Flow(Flow.FlowType.Any)
+						,);
+			}(),(WriteMemStmt s)=>{
+				foreach(key;s.outTable.keys){
+					s.outTable[key].used = true;
+					s.outTable[key].flowType = Flow.FlowType.Any;
+				}
+			}(),(ReadMemStmt s)=>{
+				s.outTable[s.dest.name] = Flow(Flow.FlowType.Any);
+			}(),(IfStmt s)=>{
+				recursiveUsed(s.var.name);
+			}(),(ApplyStmt s)=>{
+				if(s.target.name !in withNoPtrFunctionMap){
+					foreach(key;s.outTable.keys){
+						s.outTable[key].used = true;
+						s.outTable[key].flowType = Flow.FlowType.Any;
+					}
+				}
+				s.outTable[s.dest.name] = Flow(Flow.FlowType.Any);
+				foreach(arg;s.args) recursiveUsed(arg.name);
+
+			}(),(PrintStmt s)=>{
+				recursiveUsed(s.var.name);
+			}(),(ReturnStmt s)=>{
+				recursiveUsed(s.var.name);
+			}()
+			);
+		return stmt.outTable.dup();
+	}
 
 }
-
-
 
 class ToMips{
 	public this(){}
@@ -203,9 +333,12 @@ class ToMips{
 		];
 	}
 	string[] endsFunc;
+	string[] usedMap;
 
 	public string toMipsCode(Global global){
-		if(!global.offseted) return "call toOffset first !!! \n";		
+		if(!global.offseted) return "call toOffset first !!! \n";
+		usedMap = global.usedMap;
+		usedMap.writeln;
 		auto mipsCode = toMips(global);
 		auto res = "";
 		foreach(m;mipsCode){
@@ -216,55 +349,67 @@ class ToMips{
 		return res;
 	}
 
-	string[] print(Var var){
-		return [
-			LW(var,R.a0),
-			Mips.li(R.v0,1),
-			"syscall",
-		];
+	string[] toMips(Global g){
+		return 	[".text",".globl main"] ~
+			g.fun_defs.map!(a=>toMips(a)).join;
 	}
-	string[] print(int lit){
-		return [
-			Mips.li(R.a0,lit),
-			Mips.li(R.v0,1),
-			"syscall",
-		];
+	string[] toMips(Fun_def a){
+		return 	
+			a.var.name == "print" ?  null : [a.var.name ~ ":"] 
+			~ startsFunc(a.maxOffset)
+			~ stmtToMips(a.cmpdStmt)
+			~ endsFunc;
 	}
 
-	string[] toMips(Object o){
-		return o.castSwitch!(
-			(Global a)=>
-				[".text",".globl main"] ~
-				a.fun_defs.map!(a=>toMips(a)).join
-			,(Fun_def a)=>
-				a.var.name == "print" ?  null :
-				[a.var.name ~ ":"] 
-					~ startsFunc(a.maxOffset)
-					~ toMips(a.cmpdStmt)
-					~ endsFunc
-			,(CmpdStmt a)=> 
-				a.stmts.map!(a=>toMips(a)).join
-			,(AssignStmt a)=>
-				toMips(a.expr) ~ [SW(a.var,R.t0)]
-			,(WriteMemStmt a)=>[ 
-				LW(a.src,R.t0),
-				LW(a.dest,R.t1),
+
+	string[] stmtToMips(Stmt s){
+		s.writeln;
+		s.inTable.writeln;
+		s.outTable.writeln("\n");
+		if(s.skipped) return null;
+		return s.castSwitch!(
+			(CmpdStmt a)=> 
+				a.stmts.map!(a=>stmtToMips(a)).join
+			,(AssignStmt a)=>{
+				if(!usedMap.canFind(a.var.name)) return null;
+				return exprToMips(a.expr,a.inTable) ~ ( [SW(a.var,R.t0)]);
+			}(),(WriteMemStmt a)=>[ 
+				loadFlow(a.src,R.t0,a.inTable),
+				loadFlow(a.dest,R.t1,a.inTable),
 				Mips.sw(R.t0,0,R.t1),
-			],(ReadMemStmt a)=>[
-				LW(a.src,R.t0),
+			],(ReadMemStmt a)=>[ 
+				loadFlow(a.src,R.t0,a.inTable),
 				Mips.lw(R.t0,0,R.t0),
 				SW(a.dest,R.t0)
-			],(IfStmt a)=>[
-				LW(a.var,R.t0),
-				Mips.beqz(R.t0,a.elseLabel.label)
-			],(GotoStmt a)=>[
+			],(IfStmt a)=>{
+				if(a.var.name in a.inTable){
+					auto flowed = a.inTable[a.var.name];
+					if (flowed.flowType == Flow.FlowType.Konst){
+						return [Mips.j(
+								flowed.konstValue == 0 ? 
+								a.elseLabel.label :
+								a.trueLabel.label
+								)];
+					}else if (flowed.flowType == Flow.FlowType.OtherVar){
+						//assert(false);
+						return [
+							loadFlow(a.var,R.t0,a.inTable),
+							Mips.beqz(R.t0,a.elseLabel.label)
+						];
+					}
+				}
+				return [
+					loadFlow(a.var,R.t0,a.inTable),
+					Mips.beqz(R.t0,a.elseLabel.label)
+				];
+			}(),(GotoStmt a)=>[
 				Mips.j(a.label)
 			],(ApplyStmt a)=>{
 				string[] res;
 				if(a.args.length > 0){
 					res ~= 	Mips.addiu(R.t1,R.sp,cast(int)(-4 * a.args.length));
 					foreach(int i,arg;a.args){
-						res ~= LW(arg,R.t0);
+						res ~= loadFlow(arg,R.t0,a.inTable);
 						res ~= Mips.sw(R.t0,4 * i,R.t1);
 					}
 					res ~= Mips.move(R.sp,R.t1);
@@ -273,39 +418,69 @@ class ToMips{
 				if(a.args.length > 0) 
 					res ~= Mips.addiu(R.sp,R.sp,cast(int)(4 * a.args.length));
 				return res ~ SW(a.dest,R.v0);				
-			}(),(ReturnStmt a)=> //
-				LW(a.var,R.v0) ~ endsFunc
-			,(PrintStmt a)=>[ //print $t0
-				LW(a.var,R.a0),
-				Mips.li(R.v0,1),
-				"syscall",
-			],(LabelStmt a)=>[
+			}(),(ReturnStmt a)=> {
+				return 
+					loadFlow(a.var,R.v0,a.inTable)
+					~ endsFunc;
+			}(),(PrintStmt a)=>{
+				return [
+					loadFlow(a.var,R.a0,a.inTable),
+					Mips.li(R.v0,1),
+					"syscall",
+				];
+			}(),(LabelStmt a)=>[
 				a.name ~ ":"
-			],(VarExpr a)=>[ //$t0 = lw var
-				LW(a.var,R.t0)
+			]);
+	}
+	string loadFlow(Var var,R reg,Flow[string] inTable){
+		if(var.name in inTable){
+			auto flowed = inTable[var.name];
+			if (flowed.flowType == Flow.FlowType.Konst){
+				return Mips.li(reg,flowed.konstValue);
+			}else if (flowed.flowType == Flow.FlowType.OtherVar){
+				//toassert(false);
+				return LW(var,reg);
+			}
+		}
+		return LW(var,reg);
+	}
+
+	string[] exprToMips(Expr e,Flow[string] inTable){
+		return e.castSwitch!(
+			(VarExpr a)=>[ //$t0 = lw var
+				loadFlow(a.var,R.t0,inTable)
 			],(LitExpr a)=>[ //$t0 = li num
 				Mips.li(R.t0,a.num)
-			],(AopExpr a)=>[ //$t1,$t2 = lw var1,lw var2; $t0 = $t1 op $t2
-				LW(a.Left,R.t1) ,
-				LW(a.Right,R.t2),
-				a.Op.predSwitch(
-					"+",Mips.add(R.t0,R.t1,R.t2),
-					"-",Mips.sub(R.t0,R.t1,R.t2),
-					"*",Mips.mul(R.t0,R.t1,R.t2),
-					"/",Mips.div(R.t0,R.t1,R.t2),
-					"==",Mips.seq(R.t0,R.t1,R.t2),
-					"!=",Mips.sne(R.t0,R.t1,R.t2),
-					"<=",Mips.sle(R.t0,R.t1,R.t2),
-					">=",Mips.sge(R.t0,R.t1,R.t2),
-					">" ,Mips.sgt(R.t0,R.t1,R.t2),
-					"<" ,Mips.slt(R.t0,R.t1,R.t2))
-			],(AddrExpr a)=>[ //$t0 = sp + a.ofs
+			],(AopExpr a)=>{
+				return [ //$t1,$t2 = lw var1,lw var2; $t0 = $t1 op $t2
+					loadFlow(a.Left,R.t1,inTable) ,
+					loadFlow(a.Right,R.t2,inTable),
+					a.Op.predSwitch(
+						"+",Mips.add(R.t0,R.t1,R.t2),
+						"-",Mips.sub(R.t0,R.t1,R.t2),
+						"*",Mips.mul(R.t0,R.t1,R.t2),
+						"/",Mips.div(R.t0,R.t1,R.t2),
+						"==",Mips.seq(R.t0,R.t1,R.t2),
+						"!=",Mips.sne(R.t0,R.t1,R.t2),
+						"<=",Mips.sle(R.t0,R.t1,R.t2),
+						">=",Mips.sge(R.t0,R.t1,R.t2),
+						">" ,Mips.sgt(R.t0,R.t1,R.t2),
+						"<" ,Mips.slt(R.t0,R.t1,R.t2))
+				];
+			}(),(AddrExpr a)=>[ //$t0 = sp + a.ofs
 				Mips.addiu(R.t0,R.sp,a.var.ROffset)
-			])();
+			]);
 	}
+
 }
+
 class ToOffset{
-	public this(Global g){toOffset(g);}
+	string[] usedMap;
+
+	public this(Global g){
+		usedMap = g.usedMap;
+		toOffset(g);
+	}
 	int MaxOffset = 0,offset = 0;
 	void init(int startOffset = 0){
 		MaxOffset = offset = startOffset;
@@ -313,7 +488,8 @@ class ToOffset{
 	void toOffset(Object o){
 		o.castSwitch!(
 			(Var a)=>{
-				a.name = "$" ~ offset.to!string;
+				if(! usedMap.canFind(a.name)) return;
+				a.offset = offset;
 				a.type = EType.Offset;
 				offset += 4;
 				MaxOffset = MaxOffset.max(offset);

@@ -12,6 +12,7 @@ class Var {
 	public int level;
 	public int arrayNum = 0;
 	public R ptr = R.sp;
+	public int offset = 0;
 	public bool isArray(){return arrayNum > 0;}
 	public this (string name,EType type,int level,int arrayNum = 0,R ptr = R.sp){
 		this.name = name;
@@ -43,8 +44,9 @@ class Var {
 	}
 	//["a":[(),(),()]]
 	@property public int ROffset(){
-		assert(name.startsWith("$"));
-		return name[1..$].to!int;
+		name.writeln;
+		assert(type == EType.Offset);
+		return offset;
 	} 
 }
 
@@ -52,7 +54,10 @@ class Var {
 class Global{
 	public Var_def[] var_defs = [];
 	public Fun_def[] fun_defs = [];
+	public string[] usedMap;
+	public bool[string] withNoPtrFunctionMap;
 	public this (SCTree t){
+		t.writeln;
 		Var_def.init();
 		Fun_def.init();
 		LabelStmt.init();
@@ -63,11 +68,16 @@ class Global{
 				case "Var_def":
 					var_defs ~= new Var_def(new Var(h,0,R.gp));	
 					break;
+				case "Fun_proto":
 				case "Fun_def":
-					fun_defs ~= new Fun_def(h); 
+					Fun_def.update(fun_defs,h);
 					break;
 				default:break;
 			}
+		}
+		foreach(f;fun_defs){
+			if(f.withNoPtr) 
+				withNoPtrFunctionMap[f.var.name] = true;
 		}
 	}
 	public override string toString() const {
@@ -97,6 +107,7 @@ class Var_def {
 	}
 	static Var[] varList = [];
 	static Var searchVar(string id,int level){
+		id.writeln;
 		foreach_reverse(v;varList){
 			if (v.name != id) continue;
 			if (v.level > level) continue;
@@ -114,18 +125,55 @@ class Fun_def{
 	public Var[] params = [];
 	public CmpdStmt cmpdStmt;
 	public int maxOffset = 0;
-	this (SCTree t){
-		assert (t.tag  == "Fun_def");
+	public bool withNoPtr = false; //with no ptr in stmts and params
+	public static void update(ref Fun_def[] fun_defs,SCTree t){
+		string funName = t.find("ID").elem;
+		if(t.tag == "Fun_def"){
+			foreach(f;fun_defs){
+				if (f.var.name == funName){
+					"aaaa".writeln;
+					f.checkStmts(t);
+					return ;
+				}
+			}
+			fun_defs ~= new Fun_def(t,false);
+			return ;
+		}else if(t.tag == "Fun_proto"){
+			fun_defs ~= new Fun_def(t,true);
+			return ;
+		}
+		assert(0);
+	}
+	void checkStmts(SCTree t){
 		auto declare = t.find("Fun_declare");
-		var = new Var(declare,0);
 		if(declare.length > 2){
 			foreach(h;declare[2..$]){
 				params ~= (new Var_def(new Var(h,1,R.fp))).var;
 			}
 		}
-		funlist ~= this;
 		cmpdStmt = new CmpdStmt(t[1],2);
+		withNoPtr = params.all!(p=>p.type == EType.Int || p.type == EType.Void );
+		if(withNoPtr)withNoPtr = checkWithNoPtr(cmpdStmt);
 	}
+
+	this (SCTree t,bool isproto = false){
+		auto declare = t.find("Fun_declare");
+		var = new Var(declare,0);
+		funlist ~= this;
+		if(!isproto) this.checkStmts(t);
+	}
+	bool checkWithNoPtr(CmpdStmt cmpd){
+		foreach(v;cmpd.vars){
+			if(v.var.type != EType.Int) return false;
+		}
+		foreach(stmt;cmpd.stmts){
+			if(typeid(stmt) == typeid(CmpdStmt)){
+				if(! checkWithNoPtr(cast(CmpdStmt)stmt)) return false; 
+			}
+		}
+		return true;
+	}
+
 	static Fun_def[] funlist ;
 	static Fun_def searchFun(string id){
 		foreach(f;funlist){
@@ -355,41 +403,45 @@ class CmpdStmt : Stmt{
 			res ~= stmts.map!(a=>"\n" ~ tab ~ a.toString()).fold!"a~b";
 		return res ;
 	}
-	
+
+}
+public struct Flow {
+	enum FlowType{
+		Konst, //定数値畳み込み
+		OtherVar, // コピー伝播
+		Any,
+	};
+	FlowType flowType = FlowType.Any;
+	bool used = false; // => 不要代入文除去
+	int konstValue = 0;
+	string otherVar = null;
+	string dependR = "",dependL= "";
+	this(FlowType flowType,int konstValue){
+		this.flowType = flowType;
+		this.konstValue = konstValue;
+	}
+	this(FlowType flowType,string otherVar){
+		this.flowType = flowType;
+		this.otherVar = otherVar;
+	}
+	this(FlowType flowType,string dependR="",string dependL=""){
+		this.flowType = flowType;
+		this.dependR=dependR;
+		this.dependL=dependL;
+	}
+
+	string toString() {
+		return flowType.predSwitch(
+			FlowType.Konst,konstValue.to!string,
+			FlowType.OtherVar,otherVar,
+			FlowType.Any,"Any"
+			) ~ (used ? "[T]":"[F]" );
+	}
 }
 class Stmt {
 	public override string toString() const {return "";}
-	public struct Flow {
-		bool used = false; // => 不要代入文除去
-		enum FlowType{
-			Undefined,
-			Konst, //定数値畳み込み
-			OtherVar, // コピー伝播
-			Any,
-		};
-		FlowType flowType = FlowType.Undefined;
-		
-		void toKonst(int lit){
-			if(this.flowType == FlowType.Undefined){
-				this.flowType = flowType.Konst;
-				konstValue = lit;
-				return;
-			}else{
-				
-			}
-		}
-		int konstValue = 0;
-		Var otherVar = null;
-		string toString() {
-			return flowType.predSwitch(
-				FlowType.Undefined,"?",
-				FlowType.Konst,konstValue.to!string,
-				FlowType.OtherVar,otherVar.name,
-				FlowType.Any,"Any"
-				);
-		}
-	}
-	public Flow[string] flowTable;
+	public Flow[string] inTable,outTable;
+	public bool skipped = false;
 }
 class AssignStmt : Stmt{ 
 	public Var var;
