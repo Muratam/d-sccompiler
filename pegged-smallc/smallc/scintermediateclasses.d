@@ -44,7 +44,7 @@ class Var {
 	}
 	//["a":[(),(),()]]
 	@property public int ROffset(){
-		name.writeln;
+		//name.writeln;
 		assert(type == EType.Offset);
 		return offset;
 	} 
@@ -57,7 +57,6 @@ class Global{
 	public string[] usedMap;
 	public bool[string] withNoPtrFunctionMap;
 	public this (SCTree t){
-		t.writeln;
 		Var_def.init();
 		Fun_def.init();
 		LabelStmt.init();
@@ -107,7 +106,6 @@ class Var_def {
 	}
 	static Var[] varList = [];
 	static Var searchVar(string id,int level){
-		id.writeln;
 		foreach_reverse(v;varList){
 			if (v.name != id) continue;
 			if (v.level > level) continue;
@@ -131,7 +129,6 @@ class Fun_def{
 		if(t.tag == "Fun_def"){
 			foreach(f;fun_defs){
 				if (f.var.name == funName){
-					"aaaa".writeln;
 					f.checkStmts(t);
 					return ;
 				}
@@ -435,7 +432,9 @@ public struct Flow {
 			FlowType.Konst,konstValue.to!string,
 			FlowType.OtherVar,otherVar,
 			FlowType.Any,"Any"
-			) ~ (used ? "[T]":"[F]" );
+			) 
+			~ (used ? "[T]":"[F]" )
+			~ "<" ~ dependL ~"," ~ dependR ~ ">";
 	}
 }
 class Stmt {

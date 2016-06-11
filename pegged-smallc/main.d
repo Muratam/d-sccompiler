@@ -35,7 +35,7 @@ static if (!makeModule){
 				return;
 			}
 			auto global = new Global(g);
-			global.writeln;
+			//global.writeln;
 			LabeledBlock.analyze(global);
 			new ToOffset(global);
 			new ToMips().toMipsCode(global).writeln;
@@ -72,16 +72,31 @@ unittest{
 		//"int a;int main(){a = 72;print(a);}",
 	//].each!analyze;
 	[ 
-	//  "arith.sc",
-	//	"array.sc",
-	//	"cmp.sc", //#
-	//	"fib.sc", //#
-		"gcd.sc",
-	//	"global.sc",
-	//  "logic.sc",	
-	//	"scope.sc",
-	//	"swap.sc",
-	//	"while.sc",
+		"arith.sc", //#
+		"array.sc", //#
+		"cmp.sc", //#
+		"fib.sc", //#
+		"gcd.sc", //#
+		"global.sc", //#
+		"logic.sc", //#	
+		"scope.sc", //#
+		"swap.sc", //#
+		"while.sc", //#
 	].map!(a=>"../../smallcCode/basic/" ~ a)
+		.each!(a=>readText(a).analyze());
+	[
+		"ack.sc",
+		"bubble.sc",
+		"insert.sc",
+		"loop_sum.sc", //#
+		"matmul.sc",
+		"merge.sc",//!
+		"quick.sc",
+		"recur_sum.sc",//!
+		"ret_ptr.sc",//!
+		"share_ints.sc",//!
+		"short.sc", //#
+	].map!(a=>"../../smallcCode/advanced/" ~ a)
+		.tee!(a=>a.writeln)
 		.each!(a=>readText(a).analyze());
 }

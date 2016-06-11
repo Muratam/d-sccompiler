@@ -117,7 +117,11 @@ class LabeledBlock{
 					~ a.trueLabel.label ~ " : " 
 					~ a.elseLabel.label ~ `\l`;
 			}(),(ApplyStmt a)=>{
-				return a.dest.name ~ " = " ~ a.target.name ~ `()\l`;
+				return a.dest.name ~ " = " 
+					~ a.target.name ~ `(`
+					~ (a.args.length == 0 ? "" : 
+						a.args.map!"a.name".fold!`a ~ "," ~ b`)
+					~` )\l`;
 			}(),(PrintStmt a)=>{
 				return "print " ~ a.var.name ~ `\l`;
 			}(),(ReturnStmt a)=>{
@@ -169,10 +173,51 @@ class LabeledBlock{
 				}
 			}
 		}
-		//usedMap.keys.writeln;
-		//varMap.keys.writeln;
+		//usedMap.keys.writeln("pre used");
+		checkRecursiveUsed(blocks,usedMap,varMap);
+		//usedMap.keys.writeln("pro used");
 		return usedMap.keys;
 	}
+	static void checkRecursiveUsed(ref LabeledBlock[string] blocks,ref bool[string] usedMap,ref bool[string] varMap){
+		bool needUpdate = false;
+		void updateUsed(Flow[string] flowTable, string name){
+			if (name == "") return ;
+			if (name in flowTable){
+				if (flowTable[name].flowType == Flow.FlowType.Konst) return;
+			}
+			if (name !in usedMap) needUpdate  = true;
+			usedMap[name] = true;
+		}
+		void recursiveUsed(Flow[string] flowTable, string name){
+			with (flowTable[name]){
+
+				if (name !in usedMap) return;
+				switch(flowType){
+					case Flow.FlowType.OtherVar:
+						updateUsed(flowTable,otherVar);
+						break;
+					case Flow.FlowType.Any:
+						updateUsed(flowTable,dependR);
+						updateUsed(flowTable,dependL);
+						break;
+					default:break;
+				}
+			}
+		}
+		foreach(block;blocks){
+			foreach(stmt;block.stmts){
+				foreach(name;stmt.outTable.keys){
+					recursiveUsed(stmt.outTable,name);
+					if(needUpdate){ 
+						checkRecursiveUsed(blocks,usedMap,varMap);
+						return ;
+					}
+				}
+			}
+		}
+
+	}
+
 	static void recursiveAnalyze(LabeledBlock block,LabeledBlock[string] blocks,Flow[string] flowTable = ["":Flow(Flow.FlowType.Any)]){
 		//flowTable.writeln(": recursive");
 		//block.label.writeln;
@@ -184,14 +229,44 @@ class LabeledBlock{
 				recursiveAnalyze(blocks[to],blocks,outTable);
 		}
 	}
+	bool hasDifference(string[] keys1,string[] keys2){
+		string[] res;
+		foreach(k1;keys1){
+			if(!keys2.canFind(k1))res ~= k1;
+		}
+		foreach(k2;keys2){
+			if(!keys1.canFind(k2))res ~= k2;
+		}
+		//if(res != null)res.writeln("is diff");
+		return res != null;
+	}
+
+	bool compareTables(Flow[string] flow,Flow[string] inTable){
+		if (flow.values.length == 0 ) return false;
+		if (hasDifference(flow.keys,inTable.keys)) {
+			return false;
+		}
+		//flow.writeln;
+		//inTable.writeln;
+		foreach(key;flow.keys){
+			if(flow[key] == inTable[key]) continue;
+			if(inTable[key].flowType == Flow.FlowType.Any)
+				continue;
+			else {
+				//key.writeln;
+				//flow[key].writeln;
+				//inTable[key].writeln;
+				return false;
+			}
+		}
+		return true;
+	}
 
 	Flow[string]  analyzeSelf(Flow[string] flowTable){
 		if(stmts.length > 0 ){
 			//this.label.writeln;
-			if( flowTable.values.length > 0 &&
-				flowTable.values == stmts[0].inTable.values
-				&& flowTable.keys == stmts[0].inTable.keys){ 
-				"return same".writeln;
+			if(compareTables(flowTable,stmts[0].inTable) ){
+			//	"return same".writeln;
 				return null;
 			}
 		}
@@ -216,53 +291,53 @@ class LabeledBlock{
 			"!=",l != r ? 1:0,
 			);
 	}
+	static void addTable(ref Flow[string] fromTable,ref Flow[string] toTable){
+		foreach(key;fromTable.keys){
+			if(key in toTable){
+				if(toTable[key].flowType == Flow.FlowType.Any){
+					continue;
+				} 
+				//toTable[key].writeln (" is to");
+				//fromTable[key].writeln(" is from");
+				if (toTable[key] != fromTable[key]){
+				//	"toAny".writeln;
+					toTable[key].flowType = Flow.FlowType.Any;
+					if( toTable[key].dependR != ""
+						&& toTable[key].dependL != ""
+						&& fromTable[key].dependL != ""
+						&& fromTable[key].dependR != ""){
+						"this code cant compile >< sorry!".writeln;
+						assert(false);
+					}
+					continue;
+				}
+			} 
+			toTable[key] = fromTable[key];
+		}
+	}
 
 	static Flow[string] analyzeStmt(Stmt stmt,Flow[string] flowTable){
-		stmt.inTable = flowTable.dup();
-		stmt.outTable = flowTable.dup();
-		void recursiveUsed(string name){
-			if (name !in stmt.outTable) {
+		addTable(flowTable,stmt.inTable);
+		stmt.outTable = stmt.inTable.dup();
+		//stmt.writeln;
+		//stmt.inTable.writeln;
+		//stmt.outTable.writeln;
+		void addUsed(string name){
+			if(name !in stmt.outTable)
 				stmt.outTable[name] = Flow(Flow.FlowType.Any);
+			if( name in stmt.inTable ){
+				if(stmt.inTable[name].flowType == Flow.FlowType.Konst)
+					return;
 			}
-			with (stmt.outTable[name]){
-				switch(flowType){
-					case Flow.FlowType.Konst:
-						break;
-					case Flow.FlowType.OtherVar:
-						used = true;				
-						if(otherVar != "") recursiveUsed(otherVar);
-						break;
-					case Flow.FlowType.Any:
-						used = true;				
-						if(dependR != "") recursiveUsed(dependR);
-						if(dependL != "") recursiveUsed(dependL);
-						break;
-					default:break;
-				}
-			}
+			stmt.outTable[name].used = true;
 		}
-
 		stmt.castSwitch!(
 			(AssignStmt s)=>{
 				s.outTable[s.var.name] = 
 					s.expr.castSwitch!(
 						(VarExpr a)=> {
-							if(a.var.name !in s.inTable)
-								return Flow(Flow.FlowType.OtherVar,a.var.name);
-							else {
-								if(s.var.name in s.outTable ){
-									if(s.outTable[s.var.name].flowType != Flow.FlowType.OtherVar
-										|| s.outTable[s.var.name].otherVar != a.var.name)
-										return Flow(Flow.FlowType.Any);
-								}
-								return s.inTable[a.var.name];						
-							}
+							return Flow(Flow.FlowType.OtherVar,a.var.name);
 						}(),(LitExpr a)=> {
-							if(s.var.name in s.outTable ){
-								if(s.outTable[s.var.name].flowType != Flow.FlowType.Konst
-									|| s.outTable[s.var.name].konstValue != a.num)
-									return Flow(Flow.FlowType.Any);
-							}
 							return Flow(Flow.FlowType.Konst,a.num);
 						}(),(AopExpr a)=> {
 							if(a.Left.name !in s.inTable
@@ -270,21 +345,27 @@ class LabeledBlock{
 								|| s.inTable[a.Left.name].flowType != Flow.FlowType.Konst
 								|| s.inTable[a.Right.name].flowType != Flow.FlowType.Konst)
 								return Flow(Flow.FlowType.Any,a.Right.name,a.Left.name);
-							else return Flow(Flow.FlowType.Konst,calc(							
+							else return Flow(
+								Flow.FlowType.Konst,calc(							
 									s.inTable[a.Left.name].konstValue								
 									,s.inTable[a.Right.name].konstValue
-									,a.Op));
-						}(),(AddrExpr a)=>Flow(Flow.FlowType.Any)
+									,a.Op
+									)
+								);
+						}(),(AddrExpr a)=>Flow(Flow.FlowType.Any,a.var.name,"")
 						,);
 			}(),(WriteMemStmt s)=>{
+				addUsed(s.src.name);
+				addUsed(s.dest.name);
 				foreach(key;s.outTable.keys){
 					s.outTable[key].used = true;
 					s.outTable[key].flowType = Flow.FlowType.Any;
 				}
 			}(),(ReadMemStmt s)=>{
 				s.outTable[s.dest.name] = Flow(Flow.FlowType.Any);
+				addUsed(s.src.name);
 			}(),(IfStmt s)=>{
-				recursiveUsed(s.var.name);
+				addUsed(s.var.name);
 			}(),(ApplyStmt s)=>{
 				if(s.target.name !in withNoPtrFunctionMap){
 					foreach(key;s.outTable.keys){
@@ -293,12 +374,11 @@ class LabeledBlock{
 					}
 				}
 				s.outTable[s.dest.name] = Flow(Flow.FlowType.Any);
-				foreach(arg;s.args) recursiveUsed(arg.name);
-
+				foreach(arg;s.args) addUsed(arg.name);
 			}(),(PrintStmt s)=>{
-				recursiveUsed(s.var.name);
+				addUsed(s.var.name);
 			}(),(ReturnStmt s)=>{
-				recursiveUsed(s.var.name);
+				addUsed(s.var.name);
 			}()
 			);
 		return stmt.outTable.dup();
@@ -308,13 +388,6 @@ class LabeledBlock{
 
 class ToMips{
 	public this(){}
-	string LW(Var var,R to){
-		if(var.isArray()) return Mips.addiu(to,var.ptr,var.ROffset);
-		else return Mips.lw(to,var.ROffset,var.ptr);
-	}
-	string SW(Var var,R from){
-		return Mips.sw(from,var.ROffset,var.ptr);
-	}
 	string[] startsFunc(int maxOffset){
 		endsFunc = mkEndsFunc(maxOffset);
 		return [ 
@@ -338,10 +411,11 @@ class ToMips{
 	public string toMipsCode(Global global){
 		if(!global.offseted) return "call toOffset first !!! \n";
 		usedMap = global.usedMap;
-		usedMap.writeln;
+		//usedMap.writeln;
 		auto mipsCode = toMips(global);
 		auto res = "";
 		foreach(m;mipsCode){
+			if(m == "") continue;
 			if (m[$-1] == ':') res ~= m;
 			else res ~= "  " ~ m;
 			res ~= "\n";
@@ -363,24 +437,26 @@ class ToMips{
 
 
 	string[] stmtToMips(Stmt s){
-		s.writeln;
-		s.inTable.writeln;
-		s.outTable.writeln("\n");
+		//s.writeln;
+		//usedMap.writeln;
+		//s.inTable.writeln;
+		//s.outTable.writeln("\n");
 		if(s.skipped) return null;
 		return s.castSwitch!(
 			(CmpdStmt a)=> 
 				a.stmts.map!(a=>stmtToMips(a)).join
 			,(AssignStmt a)=>{
 				if(!usedMap.canFind(a.var.name)) return null;
-				return exprToMips(a.expr,a.inTable) ~ ( [SW(a.var,R.t0)]);
-			}(),(WriteMemStmt a)=>[ 
-				loadFlow(a.src,R.t0,a.inTable),
-				loadFlow(a.dest,R.t1,a.inTable),
-				Mips.sw(R.t0,0,R.t1),
-			],(ReadMemStmt a)=>[ 
+				return exprToMips(a.expr,a.inTable) ~ ( [saveFlow(a.var,R.t0,a.outTable)]);
+			}(),(WriteMemStmt a)=>{
+				auto t0 = loadFlow(a.src,R.t0,a.inTable);
+				auto t1 = loadFlow(a.dest,R.t1,a.inTable);
+				if(t0 == null && t1 == null) return null;
+				return [ t0,t1, Mips.sw(R.t0,0,R.t1)];
+			}(),(ReadMemStmt a)=>[ 
 				loadFlow(a.src,R.t0,a.inTable),
 				Mips.lw(R.t0,0,R.t0),
-				SW(a.dest,R.t0)
+				saveFlow(a.dest,R.t0,a.outTable)
 			],(IfStmt a)=>{
 				if(a.var.name in a.inTable){
 					auto flowed = a.inTable[a.var.name];
@@ -417,7 +493,7 @@ class ToMips{
 				res ~= 	Mips.jal(a.target.name);
 				if(a.args.length > 0) 
 					res ~= Mips.addiu(R.sp,R.sp,cast(int)(4 * a.args.length));
-				return res ~ SW(a.dest,R.v0);				
+				return res ~ saveFlow(a.dest,R.v0,a.outTable);				
 			}(),(ReturnStmt a)=> {
 				return 
 					loadFlow(a.var,R.v0,a.inTable)
@@ -432,7 +508,19 @@ class ToMips{
 				a.name ~ ":"
 			]);
 	}
+	string saveFlow(Var var,R reg,Flow[string] outTable){
+		string SW(Var var,R from){
+			return Mips.sw(from,var.ROffset,var.ptr);
+		}
+		if (!usedMap.canFind(var.name)) return null;
+		else return SW(var,reg);
+	}
 	string loadFlow(Var var,R reg,Flow[string] inTable){
+		string LW(Var var,R to){
+			if(var.isArray()) return Mips.addiu(to,var.ptr,var.ROffset);
+			else return Mips.lw(to,var.ROffset,var.ptr);
+		}
+		if(inTable == null) return null;
 		if(var.name in inTable){
 			auto flowed = inTable[var.name];
 			if (flowed.flowType == Flow.FlowType.Konst){
@@ -447,12 +535,12 @@ class ToMips{
 
 	string[] exprToMips(Expr e,Flow[string] inTable){
 		return e.castSwitch!(
-			(VarExpr a)=>[ //$t0 = lw var
+			(VarExpr a)=>[ //$t0 =lw var
 				loadFlow(a.var,R.t0,inTable)
-			],(LitExpr a)=>[ //$t0 = li num
+			],(LitExpr a)=>[ //$t0 =li num
 				Mips.li(R.t0,a.num)
 			],(AopExpr a)=>{
-				return [ //$t1,$t2 = lw var1,lw var2; $t0 = $t1 op $t2
+				return [ //$t1,$t2 =lw var1,lw var2; $t0 = $t1 op $t2
 					loadFlow(a.Left,R.t1,inTable) ,
 					loadFlow(a.Right,R.t2,inTable),
 					a.Op.predSwitch(
@@ -468,7 +556,7 @@ class ToMips{
 						"<" ,Mips.slt(R.t0,R.t1,R.t2))
 				];
 			}(),(AddrExpr a)=>[ //$t0 = sp + a.ofs
-				Mips.addiu(R.t0,R.sp,a.var.ROffset)
+				Mips.addiu(R.t0,a.var.ptr,a.var.ROffset)
 			]);
 	}
 
@@ -488,7 +576,7 @@ class ToOffset{
 	void toOffset(Object o){
 		o.castSwitch!(
 			(Var a)=>{
-				if(! usedMap.canFind(a.name)) return;
+				if(a.ptr == R.sp && !usedMap.canFind(a.name)) return;
 				a.offset = offset;
 				a.type = EType.Offset;
 				offset += 4;
