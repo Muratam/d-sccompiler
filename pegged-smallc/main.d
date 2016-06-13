@@ -20,7 +20,7 @@ static if (!makeModule){
 			const printproto = "void print(int i){}";
 			code = printproto ~ code;
 			ParseTree p = SC(code);
-			if (p.end - p.begin < code.length) {
+			if (p.end - p.begin < code.length ) {
 				"Parse Error !!\n\n".writeln;
 				return;
 			}
@@ -56,7 +56,7 @@ void main(string[] args){
 
 
 unittest{
-	//[
+	[
 		//"int main(){print(111);print(444);}",
 		//"int d(){}int main(){print(111);d();print(444);}",
 		//"int d(){print(112);}int main(){d();d();}",
@@ -70,7 +70,9 @@ unittest{
 		//"int main(){int a,b,c;a = 112 ;b = 4434 * 3;c = 10;if(a)print(a + b >=  555 + a / 22 );}",
 		//"int fa(int n){	if(n == 0)return 1;else return n * fa(n-1);}int main(){ print(fa(4));}",
 		//"int a;int main(){a = 72;print(a);}",
-	//].each!analyze;
+		"int main(){int a,b,c;a = 10;b = 20;c = b;print(a + b + c);}"
+	].each!analyze;
+	/+
 	[ 
 		"arith.sc", //#
 		"array.sc", //#
@@ -99,4 +101,5 @@ unittest{
 	].map!(a=>"../../smallcCode/advanced/" ~ a)
 		.tee!(a=>a.writeln)
 		.each!(a=>readText(a).analyze());
+	+/
 }

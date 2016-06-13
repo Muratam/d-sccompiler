@@ -8,6 +8,8 @@ import smallc.scmips;
 enum EType {Int,Intptr,Intptrptr,Void,Offset}
 class Var {
 	public string name;
+	//@property ref string name(){return Name;}
+	//@property void name(string val){Name = val;}
 	public EType type;
 	public int level;
 	public int arrayNum = 0;
@@ -36,7 +38,7 @@ class Var {
 	}
 	public override string toString() const {
 		return "("
-			~ name ~ ":"
+			~ this.name ~ ":"
 				~ (ptr == R.sp ? "": ptr == R.fp ? "fp:":ptr == R.gp ? "gp:" : "!?")
 				~ type.to!string 
 				~ (type == EType.Offset ? "": "," ~ level.to!string)			
@@ -70,6 +72,7 @@ class Global{
 				case "Fun_proto":
 				case "Fun_def":
 					Fun_def.update(fun_defs,h);
+					Var_def.initNonGlobalVar();
 					break;
 				default:break;
 			}
@@ -78,7 +81,26 @@ class Global{
 			if(f.withNoPtr) 
 				withNoPtrFunctionMap[f.var.name] = true;
 		}
+		toLeveledVar(var_defs);
+		foreach(f;fun_defs){
+			toLeveledVar(f.cmpdStmt);
+		}
 	}
+	public static void toLeveledVar(ref CmpdStmt cmpd){
+		toLeveledVar(cmpd.vars);
+		foreach(stmt;cmpd.stmts){
+			stmt.castSwitch!(
+				(CmpdStmt c)=>{
+					toLeveledVar(c);
+				}(),(Object o) => {}());
+		}
+	}
+	public static void toLeveledVar(ref Var_def[] var_defs){
+		foreach(ref v;var_defs){
+			v.var.name = v.var.name ~ "$" ~ v.var.level.to!string;
+		}
+	}
+
 	public override string toString() const {
 		string res = "Global IRTree :\n";
 		if (var_defs.length > 0)
@@ -96,6 +118,15 @@ class Var_def {
 	this(Var var){
 		this.var = var;
 		varList ~= this.var;
+	}
+	static void initNonGlobalVar(){
+		Var[] res;
+		foreach(v;varList){
+			if(v.level == 0){
+				res ~= v;
+			}
+		}
+		varList = res;
 	}
 	static Var_def temp(EType type,int level){
 		tempIndex ++;			

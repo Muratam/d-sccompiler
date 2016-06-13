@@ -336,6 +336,13 @@ class LabeledBlock{
 				s.outTable[s.var.name] = 
 					s.expr.castSwitch!(
 						(VarExpr a)=> {
+							if(a.var.name in s.inTable){
+								if(s.inTable[a.var.name].flowType == Flow.FlowType.Konst){
+									return Flow(Flow.FlowType.Konst,s.inTable[a.var.name].konstValue);
+								}else if(s.inTable[a.var.name].flowType == Flow.FlowType.OtherVar){
+									return Flow(Flow.FlowType.OtherVar,s.inTable[a.var.name].otherVar);
+								}
+							}
 							return Flow(Flow.FlowType.OtherVar,a.var.name);
 						}(),(LitExpr a)=> {
 							return Flow(Flow.FlowType.Konst,a.num);
