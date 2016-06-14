@@ -585,7 +585,7 @@ class ToOffset{
 	void toOffset(Object o){
 		o.castSwitch!(
 			(Var a)=>{
-				if(a.ptr == R.sp && !usedMap.canFind(a.name)) return;
+				if(main.optimize && a.ptr == R.sp && !usedMap.canFind(a.name)) return;
 				a.offset = offset;
 				a.type = EType.Offset;
 				offset += 4;

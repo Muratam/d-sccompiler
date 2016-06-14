@@ -8,13 +8,14 @@ import core.sys.posix.stdlib;
 bool optimize = true;
 bool verbose  = false;
 bool showflow = false;
+bool showComment = true;
 
 static if (!makeModule){
 	import smallc.sc;
 
 	void analyze(string code){
-		try{
-			("# " ~ code.replace("\n","\n#")).writeln;
+		//try{
+			if(showComment) ("# " ~ code.replace("\n","\n#")).writeln;
 			const printproto = "void print(int i){}";
 			code = printproto ~ code;
 			ParseTree p = SC(code);
@@ -34,14 +35,15 @@ static if (!makeModule){
 			}
 			auto global = new Global(g);
 			if(verbose)global.writeln;
-			if(!optimize)LabeledBlock.analyze(global);
+			LabeledBlock.analyze(global);
 			new ToOffset(global);
 			if(verbose)global.writeln;
 			new ToMips().toMipsCode(global).writeln;
-		}catch{
-			"illegal code!".writeln;
-			exit(1);
-		}
+		//}
+		//catch{
+		//	"illegal code!".writeln;
+		//	exit(1);
+		//}
 	}
 }
 void main(string[] args){
@@ -50,18 +52,19 @@ void main(string[] args){
 		if (args.canFind("-N"))optimize = false;
 		if (args.canFind("-V"))verbose = true;
 		if (args.canFind("-F"))showflow = true;
+		if (args.canFind("-C"))showComment = false;
 		if (["--help","-h","--h","-help"].map!(a=>args.canFind(a)).any!"a"){
-			dlangAA.writeln;
+			if(showComment) dlangAA.writeln;
 			return;
 		}
 		foreach(arg;args){
 			if(arg.endsWith(".sc")){
-				writeln("#analyze " ~ arg);
+				if(showComment) writeln("#analyze " ~ arg);
 				analyze(readText(arg));
 				return;
 			}
 		}
-		dlangAA.writeln;
+		if(showComment) dlangAA.writeln;
 		for(string rl;rl = readln(),rl != ""; ){
 			analyze(rl);
 		}
@@ -70,7 +73,9 @@ void main(string[] args){
 
 
 unittest{
-	[
+	optimize = false;
+	//verbose = true;
+	//[
 		//"int main(){print(111);print(444);}",
 		//"int d(){}int main(){print(111);d();print(444);}",
 		//"int d(){print(112);}int main(){d();d();}",
@@ -84,22 +89,23 @@ unittest{
 		//"int main(){int a,b,c;a = 112 ;b = 4434 * 3;c = 10;if(a)print(a + b >=  555 + a / 22 );}",
 		//"int fa(int n){	if(n == 0)return 1;else return n * fa(n-1);}int main(){ print(fa(4));}",
 		//"int a;int main(){a = 72;print(a);}",
-		"int main(){int a,b,c;a = 10;b = 20;c = b;print(a + b + c);}"
-	].each!analyze;
-	/+
+	//	"int main(){int a,b,c;a = 10;b = 20;c = b;print(a + b + c);}"
+	//].each!analyze;
+
 	[ 
-		"arith.sc", //#
+	//	"arith.sc", //#
 		"array.sc", //#
-		"cmp.sc", //#
-		"fib.sc", //#
-		"gcd.sc", //#
-		"global.sc", //#
-		"logic.sc", //#	
-		"scope.sc", //#
-		"swap.sc", //#
-		"while.sc", //#
+	//	"cmp.sc", //#
+	//	"fib.sc", //#
+	//	"gcd.sc", //#
+	//	"global.sc", //#
+	//	"logic.sc", //#	
+	//	"scope.sc", //#
+	//	"swap.sc", //#
+	//	"while.sc", //#
 	].map!(a=>"../../smallcCode/basic/" ~ a)
 		.each!(a=>readText(a).analyze());
+	/+
 	[
 		"ack.sc",
 		"bubble.sc",
@@ -132,4 +138,5 @@ string dlangAA = `
 #              -N : not optimize 
 #              -V : verbose (output intermediate process too)
 #              -F : show flow graph (make flow.png in current directory)
+#              -C : not show comment
 `;

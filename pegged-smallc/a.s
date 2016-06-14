@@ -1,475 +1,204 @@
-#analyze smallcCode/advanced/ret_ptr.sc
-# int is_odd(int n);
-#
-#int is_even(int n) {
-#  if(n == 0) return 1;
-#  if(n == 1) return 0;
-#  return is_odd(n-1);
+#analyze smallcCode/basic/arith.sc
+# int ff(int x, int y, int z) {
+#  return x + y + z;
 #}
 #
-#int is_odd(int n) {
-#  if(n == 0) return 0;
-#  if(n == 1) return 1;
-#  return is_even(n-1);
+#int gg(int x) {
+#  return x * ff(1, 2, 3);
 #}
 #
-#int all_even(int *a) {
-#  if(*a < 0)
-#    return 1;
-#  else 
-#    return is_even(*a) && all_even(a+1);
+#int hh(int x) {
+#  return x / ff(1, 2, 3);
 #}
 #
-#int end;
-#
-#int *find_odd(int *a) {
-#  for(;;) {
-#    if(*a < 0) return &end;
-#    if(is_odd(*a)) return a;
-#    a = a + 1;
-#  }
+#int ii() {
+#  return ff(1, 2, 3) - gg(4);
 #}
 #
-#void odd_to_even(int *a) {
-#  int *p;
-#  while((p = find_odd(a)) != &end)
-#    *p = *p + 1;
-#}
-#
-#void init(int *a) {
+#int jj(int x, int y) {
 #  int i;
-#  for(i = 1; i <= 10; i = i + 1, a = a + 1)
-#    *a = i;
-#  *a = -1;
+#
+#  i = 10;
+#  x = x - y;
+#  i = i - x - 1;
+#
+#  return x + i;
 #}
 #
 #void main() {
-#  int a[11], r;
-#
-#  init(a);
-#  r = all_even(a);
-#  odd_to_even(a);
-#  print(r == 0 && all_even(a));
+#  print(ff(1, 2, 3) ==   6 &&
+#        gg(10)      ==  60 &&
+#        hh(40)      ==   6 &&
+#        ii()        == -18 &&
+#        jj(2, 4)    ==   9);
 #}
 #
   .text
   .globl main
-is_odd:
-  addiu $sp,$sp,-24
+ff:
+  addiu $sp,$sp,-8
   sw $ra, 4($sp)
   sw $fp, 0($sp)
-  addiu $fp,$sp,24
-  lw $t1, 0($fp)
-  li $t2,0
-  seq $t0,$t1,$t2
-  sw $t0, 8($sp)
-  lw $t0, 8($sp)
-  beqz $t0,_L8
-_L7:
-  li $v0,0
+  addiu $fp,$sp,8
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,24
-  jr $ra
-_L8:
-_L9:
-  lw $t1, 0($fp)
-  li $t2,1
-  seq $t0,$t1,$t2
-  sw $t0, 12($sp)
-  lw $t0, 12($sp)
-  beqz $t0,_L11
-_L10:
-  li $v0,1
-  lw $ra, 4($sp)
-  lw $fp, 0($sp)
-  addiu $sp,$sp,24
-  jr $ra
-_L11:
-_L12:
-  lw $t1, 0($fp)
-  li $t2,1
-  sub $t0,$t1,$t2
-  sw $t0, 16($sp)
-  addiu $t1,$sp,-4
-  lw $t0, 16($sp)
-  sw $t0, 0($t1)
-  move $sp,$t1
-  jal is_even
-  addiu $sp,$sp,4
-  sw $v0, 20($sp)
-  lw $v0, 20($sp)
-  lw $ra, 4($sp)
-  lw $fp, 0($sp)
-  addiu $sp,$sp,24
+  addiu $sp,$sp,8
   jr $ra
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,24
+  addiu $sp,$sp,8
   jr $ra
-is_even:
-  addiu $sp,$sp,-24
+gg:
+  addiu $sp,$sp,-8
   sw $ra, 4($sp)
   sw $fp, 0($sp)
-  addiu $fp,$sp,24
-  lw $t1, 0($fp)
-  li $t2,0
-  seq $t0,$t1,$t2
-  sw $t0, 8($sp)
-  lw $t0, 8($sp)
-  beqz $t0,_L2
-_L1:
-  li $v0,1
-  lw $ra, 4($sp)
-  lw $fp, 0($sp)
-  addiu $sp,$sp,24
-  jr $ra
-_L2:
-_L3:
-  lw $t1, 0($fp)
-  li $t2,1
-  seq $t0,$t1,$t2
-  sw $t0, 12($sp)
-  lw $t0, 12($sp)
-  beqz $t0,_L5
-_L4:
-  li $v0,0
-  lw $ra, 4($sp)
-  lw $fp, 0($sp)
-  addiu $sp,$sp,24
-  jr $ra
-_L5:
-_L6:
-  lw $t1, 0($fp)
-  li $t2,1
-  sub $t0,$t1,$t2
-  sw $t0, 16($sp)
-  addiu $t1,$sp,-4
-  lw $t0, 16($sp)
+  addiu $fp,$sp,8
+  addiu $t1,$sp,-12
   sw $t0, 0($t1)
+  sw $t0, 4($t1)
+  sw $t0, 8($t1)
   move $sp,$t1
-  jal is_odd
-  addiu $sp,$sp,4
-  sw $v0, 20($sp)
-  lw $v0, 20($sp)
+  jal ff
+  addiu $sp,$sp,12
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,24
+  addiu $sp,$sp,8
   jr $ra
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,24
+  addiu $sp,$sp,8
   jr $ra
-all_even:
-  addiu $sp,$sp,-52
+hh:
+  addiu $sp,$sp,-8
   sw $ra, 4($sp)
   sw $fp, 0($sp)
-  addiu $fp,$sp,52
-  lw $t0, 0($fp)
-  lw $t0, 0($t0)
-  sw $t0, 8($sp)
-  li $t0,0
-  sw $t0, 12($sp)
-  lw $t1, 8($sp)
-  li $t2,0
-  slt $t0,$t1,$t2
-  sw $t0, 16($sp)
-  lw $t0, 16($sp)
-  beqz $t0,_L14
-_L13:
-  li $v0,1
-  lw $ra, 4($sp)
-  lw $fp, 0($sp)
-  addiu $sp,$sp,52
-  jr $ra
-_L14:
-  lw $t0, 0($fp)
-  lw $t0, 0($t0)
-  sw $t0, 24($sp)
-  addiu $t1,$sp,-4
-  lw $t0, 24($sp)
+  addiu $fp,$sp,8
+  addiu $t1,$sp,-12
   sw $t0, 0($t1)
+  sw $t0, 4($t1)
+  sw $t0, 8($t1)
   move $sp,$t1
-  jal is_even
-  addiu $sp,$sp,4
-  sw $v0, 28($sp)
-  lw $t0, 28($sp)
-  beqz $t0,_L17
-_L16:
-  li $t0,1
-  sw $t0, 32($sp)
-  li $t0,4
-  sw $t0, 36($sp)
-  li $t1,4
-  li $t2,1
-  mul $t0,$t1,$t2
-  sw $t0, 40($sp)
-  lw $t1, 0($fp)
-  li $t2,4
-  add $t0,$t1,$t2
-  sw $t0, 44($sp)
-  addiu $t1,$sp,-4
-  lw $t0, 44($sp)
-  sw $t0, 0($t1)
-  move $sp,$t1
-  jal all_even
-  addiu $sp,$sp,4
-  sw $v0, 48($sp)
-  lw $t0, 48($sp)
-  beqz $t0,_L20
-_L19:
-  li $t0,1
-  sw $t0, 20($sp)
-  j _L21
-_L20:
-  li $t0,0
-  sw $t0, 20($sp)
-_L21:
-  j _L18
-_L17:
-  li $t0,0
-  sw $t0, 20($sp)
-_L18:
-  lw $v0, 20($sp)
+  jal ff
+  addiu $sp,$sp,12
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,52
+  addiu $sp,$sp,8
   jr $ra
-_L15:
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,52
+  addiu $sp,$sp,8
   jr $ra
-find_odd:
-  addiu $sp,$sp,-32
+ii:
+  addiu $sp,$sp,-8
   sw $ra, 4($sp)
   sw $fp, 0($sp)
-  addiu $fp,$sp,32
-_L22:
-  j _L23
-_L23:
-  lw $t0, 0($fp)
-  lw $t0, 0($t0)
-  sw $t0, 8($sp)
-  lw $t1, 8($sp)
-  li $t2,0
-  slt $t0,$t1,$t2
-  sw $t0, 12($sp)
-  lw $t0, 12($sp)
-  beqz $t0,_L26
-_L25:
-  addiu $t0,$gp,0
-  sw $t0, 16($sp)
-  lw $v0, 16($sp)
-  lw $ra, 4($sp)
-  lw $fp, 0($sp)
-  addiu $sp,$sp,32
-  jr $ra
-_L26:
-_L27:
-  lw $t0, 0($fp)
-  lw $t0, 0($t0)
-  sw $t0, 20($sp)
+  addiu $fp,$sp,8
+  addiu $t1,$sp,-12
+  sw $t0, 0($t1)
+  sw $t0, 4($t1)
+  sw $t0, 8($t1)
+  move $sp,$t1
+  jal ff
+  addiu $sp,$sp,12
   addiu $t1,$sp,-4
-  lw $t0, 20($sp)
   sw $t0, 0($t1)
   move $sp,$t1
-  jal is_odd
+  jal gg
   addiu $sp,$sp,4
-  sw $v0, 24($sp)
-  lw $t0, 24($sp)
-  beqz $t0,_L29
-_L28:
-  lw $v0, 0($fp)
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,32
+  addiu $sp,$sp,8
   jr $ra
-_L29:
-_L30:
-  lw $t1, 0($fp)
-  li $t2,4
-  add $t0,$t1,$t2
-  sw $t0, 28($sp)
-  lw $t0, 28($sp)
-  sw $t0, 0($fp)
-  j _L22
-_L24:
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,32
+  addiu $sp,$sp,8
   jr $ra
-odd_to_even:
-  addiu $sp,$sp,-44
+jj:
+  addiu $sp,$sp,-8
   sw $ra, 4($sp)
   sw $fp, 0($sp)
-  addiu $fp,$sp,44
-  li $t0,1
-  sw $t0, 12($sp)
-_L31:
-  addiu $t1,$sp,-4
-  lw $t0, 0($fp)
-  sw $t0, 0($t1)
-  move $sp,$t1
-  jal find_odd
-  addiu $sp,$sp,4
-  sw $v0, 16($sp)
-  lw $t0, 16($sp)
-  sw $t0, 8($sp)
-  addiu $t0,$gp,0
-  sw $t0, 20($sp)
-  lw $t1, 8($sp)
-  lw $t2, 20($sp)
-  sne $t0,$t1,$t2
-  sw $t0, 24($sp)
-  lw $t0, 24($sp)
-  beqz $t0,_L33
-_L32:
-  lw $t0, 8($sp)
-  lw $t0, 0($t0)
-  sw $t0, 28($sp)
-  li $t0,1
-  sw $t0, 32($sp)
-  lw $t1, 28($sp)
-  li $t2,1
-  add $t0,$t1,$t2
-  sw $t0, 36($sp)
-  lw $t0, 36($sp)
-  lw $t1, 8($sp)
-  sw $t0, 0($t1)
-  li $t0,1
-  sw $t0, 40($sp)
-  j _L31
-_L33:
+  addiu $fp,$sp,8
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,44
+  addiu $sp,$sp,8
   jr $ra
-init:
-  addiu $sp,$sp,-60
-  sw $ra, 4($sp)
-  sw $fp, 0($sp)
-  addiu $fp,$sp,60
-  li $t0,1
-  sw $t0, 12($sp)
-  li $t0,1
-  sw $t0, 8($sp)
-_L34:
-  li $t0,10
-  sw $t0, 16($sp)
-  lw $t1, 8($sp)
-  li $t2,10
-  sle $t0,$t1,$t2
-  sw $t0, 20($sp)
-  lw $t0, 20($sp)
-  beqz $t0,_L36
-_L35:
-  lw $t0, 8($sp)
-  lw $t1, 0($fp)
-  sw $t0, 0($t1)
-  li $t0,1
-  sw $t0, 24($sp)
-  lw $t1, 8($sp)
-  li $t2,1
-  add $t0,$t1,$t2
-  sw $t0, 28($sp)
-  lw $t0, 28($sp)
-  sw $t0, 8($sp)
-  li $t0,1
-  sw $t0, 32($sp)
-  li $t0,4
-  sw $t0, 36($sp)
-  li $t1,4
-  li $t2,1
-  mul $t0,$t1,$t2
-  sw $t0, 40($sp)
-  lw $t1, 0($fp)
-  li $t2,4
-  add $t0,$t1,$t2
-  sw $t0, 44($sp)
-  lw $t0, 44($sp)
-  sw $t0, 0($fp)
-  j _L34
-_L36:
-  li $t0,0
-  sw $t0, 48($sp)
-  li $t0,1
-  sw $t0, 52($sp)
-  li $t1,0
-  li $t2,1
-  sub $t0,$t1,$t2
-  sw $t0, 56($sp)
-  li $t0,-1
-  lw $t1, 0($fp)
-  sw $t0, 0($t1)
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,60
+  addiu $sp,$sp,8
   jr $ra
 main:
-  addiu $sp,$sp,-44
+  addiu $sp,$sp,-8
   sw $ra, 4($sp)
   sw $fp, 0($sp)
-  addiu $fp,$sp,44
+  addiu $fp,$sp,8
+  addiu $t1,$sp,-12
+  sw $t0, 0($t1)
+  sw $t0, 4($t1)
+  sw $t0, 8($t1)
+  move $sp,$t1
+  jal ff
+  addiu $sp,$sp,12
+  beqz $t0,_L2
+_L1:
   addiu $t1,$sp,-4
-  addiu $t0,$sp,8
   sw $t0, 0($t1)
   move $sp,$t1
-  jal init
+  jal gg
   addiu $sp,$sp,4
-  sw $v0, 16($sp)
+  beqz $t0,_L5
+_L4:
+  j _L6
+_L5:
+_L6:
+  j _L3
+_L2:
+_L3:
+  beqz $t0,_L8
+_L7:
   addiu $t1,$sp,-4
-  addiu $t0,$sp,8
   sw $t0, 0($t1)
   move $sp,$t1
-  jal all_even
+  jal hh
   addiu $sp,$sp,4
-  sw $v0, 20($sp)
-  lw $t0, 20($sp)
-  sw $t0, 12($sp)
-  addiu $t1,$sp,-4
-  addiu $t0,$sp,8
+  beqz $t0,_L11
+_L10:
+  j _L12
+_L11:
+_L12:
+  j _L9
+_L8:
+_L9:
+  beqz $t0,_L14
+_L13:
+  jal ii
+  beqz $t0,_L17
+_L16:
+  j _L18
+_L17:
+_L18:
+  j _L15
+_L14:
+_L15:
+  beqz $t0,_L20
+_L19:
+  addiu $t1,$sp,-8
   sw $t0, 0($t1)
+  sw $t0, 4($t1)
   move $sp,$t1
-  jal odd_to_even
-  addiu $sp,$sp,4
-  sw $v0, 24($sp)
-  li $t0,0
-  sw $t0, 32($sp)
-  lw $t1, 12($sp)
-  li $t2,0
-  seq $t0,$t1,$t2
-  sw $t0, 36($sp)
-  lw $t0, 36($sp)
-  beqz $t0,_L38
-_L37:
-  addiu $t1,$sp,-4
-  addiu $t0,$sp,8
-  sw $t0, 0($t1)
-  move $sp,$t1
-  jal all_even
-  addiu $sp,$sp,4
-  sw $v0, 40($sp)
-  lw $t0, 40($sp)
-  beqz $t0,_L41
-_L40:
-  li $t0,1
-  sw $t0, 28($sp)
-  j _L42
-_L41:
-  li $t0,0
-  sw $t0, 28($sp)
-_L42:
-  j _L39
-_L38:
-  li $t0,0
-  sw $t0, 28($sp)
-_L39:
-  lw $a0, 28($sp)
+  jal jj
+  addiu $sp,$sp,8
+  beqz $t0,_L23
+_L22:
+  j _L24
+_L23:
+_L24:
+  j _L21
+_L20:
+_L21:
   li $v0,1
   syscall
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,44
+  addiu $sp,$sp,8
   jr $ra
 

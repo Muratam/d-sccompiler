@@ -1,8 +1,3 @@
-#analyze smallcCode/sample/ok0.sc
-# void main() {
-#  print(1 + 2 == 3);
-#}
-#
   .text
   .globl main
 main:
@@ -10,6 +5,7 @@ main:
   sw $ra, 4($sp)
   sw $fp, 0($sp)
   addiu $fp,$sp,8
+  li $a0,1
   li $v0,1
   syscall
   lw $ra, 4($sp)
