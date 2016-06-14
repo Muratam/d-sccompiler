@@ -2,55 +2,69 @@ import pegged.grammar;
 import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv,std.file;
 import smallc.scdef,smallc.sctrim;
 import smallc.scsemanticanalysis,smallc.scintermediate;
-
 import smallc.scmips,smallc.scintermediateclasses;
+import core.sys.posix.stdlib;
+//compiler options
+bool optimize = true;
+bool verbose  = false;
+bool showflow = false;
 
-//le3soft-staff@fos.kuis.kyoto-u.ac.jp / 最終報告 => 最終報告
-//sample ng1
-//basic gcd global 
-//err shape02:isNum=>isIDで代入文 type09 type10
-//advance bubble insert ret_ptr:prototype宣言
-//木構造を簡単に扱える機構が欲しい
 static if (!makeModule){
 	import smallc.sc;
 
 	void analyze(string code){
-		//try{
+		try{
 			("# " ~ code.replace("\n","\n#")).writeln;
 			const printproto = "void print(int i){}";
 			code = printproto ~ code;
 			ParseTree p = SC(code);
 			if (p.end - p.begin < code.length ) {
 				"Parse Error !!\n\n".writeln;
-				return;
+				exit(1);
 			}
 			SCTree g = new SCTree(p);
 			if (!g.tryTrim()) {
 				"reserved Error".writeln;
-				return;
+				exit(1);
 			}
-			//g.writeln;
+			 if(verbose)g.writeln;
 			if (!(new SemanticAnalyze().startAnalyze(g))){
 				"Using Illegal Semantics !!!".writeln;
-				return;
+				exit(1);
 			}
 			auto global = new Global(g);
-			//global.writeln;
-			LabeledBlock.analyze(global);
+			if(verbose)global.writeln;
+			if(!optimize)LabeledBlock.analyze(global);
 			new ToOffset(global);
+			if(verbose)global.writeln;
 			new ToMips().toMipsCode(global).writeln;
-		//}catch{"illegal code!".writeln;}
+		}catch{
+			"illegal code!".writeln;
+			exit(1);
+		}
 	}
 }
 void main(string[] args){
 	static if (makeModule) asModule("smallc.sc","smallc/sc",scdefstr);
 	else {
-		if (args.length > 1) {
-			writeln("#analyze " ~ args[1]);
-			analyze(readText(args[1]));
-			return ;
+		if (args.canFind("-N"))optimize = false;
+		if (args.canFind("-V"))verbose = true;
+		if (args.canFind("-F"))showflow = true;
+		if (["--help","-h","--h","-help"].map!(a=>args.canFind(a)).any!"a"){
+			dlangAA.writeln;
+			return;
 		}
-		while (true) analyze(readln());
+		foreach(arg;args){
+			if(arg.endsWith(".sc")){
+				writeln("#analyze " ~ arg);
+				analyze(readText(arg));
+				return;
+			}
+		}
+		dlangAA.writeln;
+		for(string rl;rl = readln(),rl != ""; ){
+			analyze(rl);
+		}
 	}
 }
 
@@ -103,3 +117,19 @@ unittest{
 		.each!(a=>readText(a).analyze());
 	+/
 }
+
+string dlangAA = `
+#   _   _    smallC->mips compiler by murata !
+#  (_) (_)   written in dlang !! awesome !   
+# /______ \  thanks for the package PEGGED !!
+# \\(O(O \/   
+#  | | | |   for more information,see
+#  | |_| |     https://github.com/Muratam/d-sccompiler !
+# /______/   usage : 
+#   <   >      $rdmd main.d # input smallcCode std-in or
+#  (_) (_)     $rdmd main.d hoge.sc # specify filename
+#            option :
+#              -N : not optimize 
+#              -V : verbose (output intermediate process too)
+#              -F : show flow graph (make flow.png in current directory)
+`;

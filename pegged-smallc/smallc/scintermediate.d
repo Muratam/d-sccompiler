@@ -1,5 +1,6 @@
 module smallc.scintermediate;
 import pegged.grammar;
+import main;
 import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv;
 import smallc.scdef,smallc.sctrim,smallc.scsemanticanalysis;
 import smallc.scmips;
@@ -90,7 +91,7 @@ class LabeledBlock{
 
 		}
 		genLabel(global);
-		toGraphiz(blocks.values());
+		if(main.showflow)toGraphiz(blocks.values());
 		global.usedMap =  analyze(blocks);
 	}
 
@@ -158,6 +159,7 @@ class LabeledBlock{
 			);
 	}
 	static string[] analyze(LabeledBlock[string] blocks){
+		if ("BEGIN" !in blocks) return null;
 		recursiveAnalyze(blocks["BEGIN"],blocks);
 		bool[string] usedMap; 
 		bool[string] varMap;
