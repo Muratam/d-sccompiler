@@ -1,30 +1,42 @@
   .text
   .globl main
 loop:
-  addiu $sp,$sp,-8
+  addiu $sp,$sp,-24
   sw $ra, 4($sp)
   sw $fp, 0($sp)
-  addiu $fp,$sp,8
+  addiu $fp,$sp,24
   jal loop
-  li $v0,-1
+  sw $v0, 8($sp)
+  li $t0,0
+  sw $t0, 12($sp)
+  li $t0,1
+  sw $t0, 16($sp)
+  lw $t1, 12($sp)
+  lw $t2, 16($sp)
+  sub $t0,$t1,$t2
+  sw $t0, 20($sp)
+  lw $v0, 20($sp)
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,8
+  addiu $sp,$sp,24
   jr $ra
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,8
+  addiu $sp,$sp,24
   jr $ra
 check_and:
-  addiu $sp,$sp,-16
+  addiu $sp,$sp,-28
   sw $ra, 4($sp)
   sw $fp, 0($sp)
-  addiu $fp,$sp,16
-  j _L2
+  addiu $fp,$sp,28
+  li $t0,0
+  sw $t0, 12($sp)
+  lw $t0, 12($sp)
+  beqz $t0,_L2
 _L1:
   jal loop
-  sw $v0, 12($sp)
-  lw $t0, 12($sp)
+  sw $v0, 16($sp)
+  lw $t0, 16($sp)
   beqz $t0,_L5
 _L4:
   li $t0,1
@@ -42,36 +54,43 @@ _L3:
   lw $t0, 8($sp)
   beqz $t0,_L8
 _L7:
-  li $v0,0
+  li $t0,0
+  sw $t0, 20($sp)
+  lw $v0, 20($sp)
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,16
+  addiu $sp,$sp,28
   jr $ra
 _L8:
 _L9:
-  li $v0,1
+  li $t0,1
+  sw $t0, 24($sp)
+  lw $v0, 24($sp)
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,16
+  addiu $sp,$sp,28
   jr $ra
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,16
+  addiu $sp,$sp,28
   jr $ra
 check_or:
-  addiu $sp,$sp,-16
+  addiu $sp,$sp,-28
   sw $ra, 4($sp)
   sw $fp, 0($sp)
-  addiu $fp,$sp,16
-  j _L10
+  addiu $fp,$sp,28
+  li $t0,1
+  sw $t0, 12($sp)
+  lw $t0, 12($sp)
+  beqz $t0,_L11
 _L10:
   li $t0,1
   sw $t0, 8($sp)
   j _L12
 _L11:
   jal loop
-  sw $v0, 12($sp)
-  lw $t0, 12($sp)
+  sw $v0, 16($sp)
+  lw $t0, 16($sp)
   beqz $t0,_L14
 _L13:
   li $t0,1
@@ -85,21 +104,25 @@ _L12:
   lw $t0, 8($sp)
   beqz $t0,_L17
 _L16:
-  li $v0,1
+  li $t0,1
+  sw $t0, 20($sp)
+  lw $v0, 20($sp)
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,16
+  addiu $sp,$sp,28
   jr $ra
 _L17:
 _L18:
-  li $v0,0
+  li $t0,0
+  sw $t0, 24($sp)
+  lw $v0, 24($sp)
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,16
+  addiu $sp,$sp,28
   jr $ra
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,16
+  addiu $sp,$sp,28
   jr $ra
 main:
   addiu $sp,$sp,-20

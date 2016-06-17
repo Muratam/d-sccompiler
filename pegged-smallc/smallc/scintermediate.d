@@ -455,7 +455,7 @@ class ToMips{
 			(CmpdStmt a)=> 
 				a.stmts.map!(a=>stmtToMips(a)).join
 			,(AssignStmt a)=>{
-				if(!usedMap.canFind(a.var.name)) return null;
+				if(main.optimize && !usedMap.canFind(a.var.name)) return null;
 				return exprToMips(a.expr,a.inTable) ~ ( [saveFlow(a.var,R.t0,a.outTable)]);
 			}(),(WriteMemStmt a)=>{
 				auto t0 = loadFlow(a.src,R.t0,a.inTable);
@@ -467,20 +467,22 @@ class ToMips{
 				Mips.lw(R.t0,0,R.t0),
 				saveFlow(a.dest,R.t0,a.outTable)
 			],(IfStmt a)=>{
-				if(a.var.name in a.inTable){
-					auto flowed = a.inTable[a.var.name];
-					if (flowed.flowType == Flow.FlowType.Konst){
-						return [Mips.j(
-								flowed.konstValue == 0 ? 
-								a.elseLabel.label :
-								a.trueLabel.label
-								)];
-					}else if (flowed.flowType == Flow.FlowType.OtherVar){
-						//assert(false);
-						return [
-							loadFlow(a.var,R.t0,a.inTable),
-							Mips.beqz(R.t0,a.elseLabel.label)
-						];
+				if(main.optimize ){
+					if(a.var.name in a.inTable){
+						auto flowed = a.inTable[a.var.name];
+						if (flowed.flowType == Flow.FlowType.Konst){
+							return [Mips.j(
+									flowed.konstValue == 0 ? 
+									a.elseLabel.label :
+									a.trueLabel.label
+									)];
+						}else if (flowed.flowType == Flow.FlowType.OtherVar){
+							//assert(false);
+							return [
+								loadFlow(a.var,R.t0,a.inTable),
+								Mips.beqz(R.t0,a.elseLabel.label)
+							];
+						}
 					}
 				}
 				return [
@@ -521,7 +523,8 @@ class ToMips{
 		string SW(Var var,R from){
 			return Mips.sw(from,var.ROffset,var.ptr);
 		}
-		if (!usedMap.canFind(var.name)) return null;
+
+		if (main.optimize && !usedMap.canFind(var.name)) return null;
 		else return SW(var,reg);
 	}
 	string loadFlow(Var var,R reg,Flow[string] inTable){
@@ -529,14 +532,16 @@ class ToMips{
 			if(var.isArray()) return Mips.addiu(to,var.ptr,var.ROffset);
 			else return Mips.lw(to,var.ROffset,var.ptr);
 		}
-		if(inTable == null) return null;
-		if(var.name in inTable){
-			auto flowed = inTable[var.name];
-			if (flowed.flowType == Flow.FlowType.Konst){
-				return Mips.li(reg,flowed.konstValue);
-			}else if (flowed.flowType == Flow.FlowType.OtherVar){
-				//toassert(false);
-				return LW(var,reg);
+		if(main.optimize){
+			if(inTable == null) return null;
+			if(var.name in inTable){
+				auto flowed = inTable[var.name];
+				if (flowed.flowType == Flow.FlowType.Konst){
+					return Mips.li(reg,flowed.konstValue);
+				}else if (flowed.flowType == Flow.FlowType.OtherVar){
+					//toassert(false);
+					return LW(var,reg);
+				}
 			}
 		}
 		return LW(var,reg);

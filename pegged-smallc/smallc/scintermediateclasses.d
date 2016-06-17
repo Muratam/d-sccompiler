@@ -3,7 +3,7 @@ import pegged.grammar;
 import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv;
 import smallc.scdef,smallc.sctrim,smallc.scsemanticanalysis;
 import smallc.scmips;
-
+// name04,name05 
 
 enum EType {Int,Intptr,Intptrptr,Void,Offset}
 class Var {

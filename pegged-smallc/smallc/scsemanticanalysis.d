@@ -56,7 +56,7 @@ class SemanticAnalyze{
 	SCType[string][] env ;
 	SCType[string] getInitEnv(){return ["":new SCType("")].init;}
 	SCType writeTypeError(SCTree t,string str){
-		writeln(str ~ " [" ~ t.begin.to!string ~ "," ~t.end.to!string ~ "]");
+		stderr.writeln(str ~ " [" ~ t.begin.to!string ~ "," ~t.end.to!string ~ "]");
 		errored = true;
 		return null;
 	}
@@ -72,23 +72,23 @@ class SemanticAnalyze{
 		switch(t.tag){
 		case "Var_def":
 			auto type = new SCType(t.find("Type_info"));
-			if (type.type.startsWith("void")) 
+			if (type.type.startsWith("void"))
 				return t.writeError("can't declare void type!!");
 			auto id = t.find("ID").elem;
-			if(!addVar(id,type)) 
+			if(!addVar(id,type))
 				return t.writeError(id ~ " already exists");
-			return true;	
+			return true;
 		case "Fun_proto":
 		case "Fun_def":
-			auto pre_lv = env.length ; 
+			auto pre_lv = env.length ;
 			if(t[].any!(a => !analyze(a,t.tag))) return false;
 			env = env[0..pre_lv];
-			return true;	
+			return true;
 		case "Fun_declare":
 			auto func = new SCType(t[0],info == "Fun_proto" ? Info.proto : Info.func);
 			auto id = t[1].elem;
 			if (func.type == "void *")
-				return t.writeError("void * is not allowed"); 
+				return t.writeError("void * is not allowed");
 			SCType[string] paramEnv;
 			if (t.length > 2){
 				foreach(param;t[2..$]){
@@ -103,21 +103,21 @@ class SemanticAnalyze{
 				}
 			}
 			if (!addVar(id,func))
-				return t.writeError(id ~ " already exists!"); 
+				return t.writeError(id ~ " already exists!");
 			env.last["#returnType"] = new SCType(func.type);
 			env ~= getInitEnv();
 			foreach(pid,ptype;paramEnv)
-				if (!addVar(pid,ptype)) 
+				if (!addVar(pid,ptype))
 					return t.writeError("can't add param " ~ pid);
 			return true;
-			
+
 		case "Stmts":
 			env ~= getInitEnv();
 			if(!t[].all!(a => analyze(a,info)))
 				return t.writeError("wrong type!");
 			env = env[0..$-1];
-			return true;	
-		case "Stmt": 
+			return true;
+		case "Stmt":
 			return checkType(t) !is null;
 		default :
 			return t[].all!(a => analyze(a,info));
@@ -156,7 +156,7 @@ class SemanticAnalyze{
 					return writeTypeError(t,id ~ ": arg size wrong !!");
 				if (regestered.args.length > 0){
 					auto params = t[1..$].map!(a => checkType(a));
-					if(params.any!(a => a is null)) 
+					if(params.any!(a => a is null))
 						return writeTypeError(t,id ~ ": args illegal !!");
 					if(zip(params,regestered.args).any!(a=>!a[0].sameType(a[1])))
 						return writeTypeError(t,id ~ ": args type differs !!");
@@ -169,12 +169,12 @@ class SemanticAnalyze{
 			foreach_reverse(v;env){
 				if (id !in v) continue;
 				auto regestered = v[id];
-				if (regestered.isFunction) 
-					return writeTypeError(t,id ~ " was regestered as function !!");					
+				if (regestered.isFunction)
+					return writeTypeError(t,id ~ " was regestered as function !!");
 				return regestered;
 			}
 			return writeTypeError(t,id ~ " was not delcared !! ");
-		case "NUM":	
+		case "NUM":
 			return new SCType("int",Info.num);
 		}
 	}
@@ -201,37 +201,37 @@ class SemanticAnalyze{
 				if (t.length == 1) return writeTypeError(t,"return type must not be void !!");
 				auto returnval = checkType(t[1]);
 				if(returnval is null) return null;
-				if (returnType.type == returnval.type) 
+				if (returnType.type == returnval.type)
 					return new SCType("void");
 				return writeTypeError(t,"return type differs!!!");
 			}
 		case ";":
 			return new SCType("void");
 		default :break;
-		}	
-		
+		}
+
 		final switch(t[0].tag){
-		case "Stmts": 
+		case "Stmts":
 			if (!analyze(t[0])) return null;
 			else return new SCType("void");
-		case "Expr": 
-			return checkType(t[0]);					
+		case "Expr":
+			return checkType(t[0]);
 		}
 	}
 	private SCType checkExprType(SCTree t){
 		final switch(t.length){
-		case 1: 
+		case 1:
 			return checkType(t[0]);
-		case 2: 
+		case 2:
 			auto operator = t[0].elem;
 			auto type1 = checkType(t[1]);
 			if (type1 is null) return null;
 			final switch (operator){
-			case "&": 
+			case "&":
 				if(t[1].length == 1 && t[1][0].tag == "ID"){
 					return op1(type1,["int","int *"]);
 				}else return writeTypeError(t,"can't '&' operator not for variable");
-			case "*": 
+			case "*":
 				return op1(type1,["int *","int"],["int * *","int *"]);
 			}
 		case 3:
@@ -255,12 +255,12 @@ class SemanticAnalyze{
 					,["int * *","int","int * *"]);
 			case "*":case "/": case "&&":case "||":
 				return op2(type1,type2,["int","int","int"]);
-			case "==":case "!=":case ">": case "<": case "<=":case ">=": 
+			case "==":case "!=":case ">": case "<": case "<=":case ">=":
 				return type1.sameType(type2) ? new SCType("int"): null;
-			case ",": 
+			case ",":
 				return type2;
-			case "=": 
-				if(type1.isArray) return null; 
+			case "=":
+				if(type1.isArray) return null;
 				if(type1.isNum) return null;
 				if(type1.type == "int" && type1.info == Info.expr) return null;
 				return type1.sameType(type2) ? type1 : null;

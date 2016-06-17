@@ -7,13 +7,13 @@ init_val:
   addiu $fp,$sp,52
   li $t0,0
   sw $t0, 12($sp)
-  li $t0,0
+  lw $t0, 12($sp)
   sw $t0, 8($sp)
 _L1:
   li $t0,200
   sw $t0, 16($sp)
   lw $t1, 8($sp)
-  li $t2,200
+  lw $t2, 16($sp)
   sle $t0,$t1,$t2
   sw $t0, 20($sp)
   lw $t0, 20($sp)
@@ -21,13 +21,13 @@ _L1:
 _L2:
   li $t0,200
   sw $t0, 24($sp)
-  li $t1,200
+  lw $t1, 24($sp)
   lw $t2, 8($sp)
   sub $t0,$t1,$t2
   sw $t0, 28($sp)
   li $t0,4
   sw $t0, 32($sp)
-  li $t1,4
+  lw $t1, 32($sp)
   lw $t2, 8($sp)
   mul $t0,$t1,$t2
   sw $t0, 36($sp)
@@ -41,7 +41,7 @@ _L2:
   li $t0,1
   sw $t0, 44($sp)
   lw $t1, 8($sp)
-  li $t2,1
+  lw $t2, 44($sp)
   add $t0,$t1,$t2
   sw $t0, 48($sp)
   lw $t0, 48($sp)
@@ -53,10 +53,10 @@ _L3:
   addiu $sp,$sp,52
   jr $ra
 sum:
-  addiu $sp,$sp,-48
+  addiu $sp,$sp,-52
   sw $ra, 4($sp)
   sw $fp, 0($sp)
-  addiu $fp,$sp,48
+  addiu $fp,$sp,52
   lw $t0, 0($fp)
   lw $t0, 0($t0)
   sw $t0, 12($sp)
@@ -65,7 +65,7 @@ sum:
   li $t0,0
   sw $t0, 16($sp)
   lw $t1, 8($sp)
-  li $t2,0
+  lw $t2, 16($sp)
   sne $t0,$t1,$t2
   sw $t0, 20($sp)
   lw $t0, 20($sp)
@@ -75,12 +75,12 @@ _L4:
   sw $t0, 24($sp)
   li $t0,4
   sw $t0, 28($sp)
-  li $t1,4
-  li $t2,1
+  lw $t1, 28($sp)
+  lw $t2, 24($sp)
   mul $t0,$t1,$t2
   sw $t0, 32($sp)
   lw $t1, 0($fp)
-  li $t2,4
+  lw $t2, 32($sp)
   add $t0,$t1,$t2
   sw $t0, 36($sp)
   addiu $t1,$sp,-4
@@ -97,18 +97,20 @@ _L4:
   lw $v0, 44($sp)
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,48
+  addiu $sp,$sp,52
   jr $ra
 _L5:
-  li $v0,0
+  li $t0,0
+  sw $t0, 48($sp)
+  lw $v0, 48($sp)
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,48
+  addiu $sp,$sp,52
   jr $ra
 _L6:
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,48
+  addiu $sp,$sp,52
   jr $ra
 sum2:
   addiu $sp,$sp,-48
@@ -123,7 +125,7 @@ sum2:
   li $t0,0
   sw $t0, 16($sp)
   lw $t1, 8($sp)
-  li $t2,0
+  lw $t2, 16($sp)
   sne $t0,$t1,$t2
   sw $t0, 20($sp)
   lw $t0, 20($sp)
@@ -133,12 +135,12 @@ _L7:
   sw $t0, 24($sp)
   li $t0,4
   sw $t0, 28($sp)
-  li $t1,4
-  li $t2,1
+  lw $t1, 28($sp)
+  lw $t2, 24($sp)
   mul $t0,$t1,$t2
   sw $t0, 32($sp)
   lw $t1, 0($fp)
-  li $t2,4
+  lw $t2, 32($sp)
   add $t0,$t1,$t2
   sw $t0, 36($sp)
   lw $t1, 4($fp)
@@ -171,10 +173,10 @@ _L9:
   addiu $sp,$sp,48
   jr $ra
 main:
-  addiu $sp,$sp,-40
+  addiu $sp,$sp,-44
   sw $ra, 4($sp)
   sw $fp, 0($sp)
-  addiu $fp,$sp,40
+  addiu $fp,$sp,44
   jal init_val
   sw $v0, 8($sp)
   addiu $t1,$sp,-4
@@ -187,7 +189,7 @@ main:
   li $t0,20100
   sw $t0, 20($sp)
   lw $t1, 16($sp)
-  li $t2,20100
+  lw $t2, 20($sp)
   seq $t0,$t1,$t2
   sw $t0, 24($sp)
   lw $t0, 24($sp)
@@ -198,17 +200,19 @@ _L10:
   addiu $t1,$sp,-8
   addiu $t0,$gp,0
   sw $t0, 0($t1)
-  li $t0,0
+  lw $t0, 28($sp)
   sw $t0, 4($t1)
   move $sp,$t1
   jal sum2
   addiu $sp,$sp,8
   sw $v0, 32($sp)
-  lw $t1, 32($sp)
-  li $t2,20100
-  seq $t0,$t1,$t2
+  li $t0,20100
   sw $t0, 36($sp)
-  lw $t0, 36($sp)
+  lw $t1, 32($sp)
+  lw $t2, 36($sp)
+  seq $t0,$t1,$t2
+  sw $t0, 40($sp)
+  lw $t0, 40($sp)
   beqz $t0,_L14
 _L13:
   li $t0,1
@@ -228,6 +232,6 @@ _L12:
   syscall
   lw $ra, 4($sp)
   lw $fp, 0($sp)
-  addiu $sp,$sp,40
+  addiu $sp,$sp,44
   jr $ra
 

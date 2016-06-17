@@ -14,23 +14,23 @@ static if (!makeModule){
 	import smallc.sc;
 
 	void analyze(string code){
-		//try{
+		try{
 			if(showComment) ("# " ~ code.replace("\n","\n#")).writeln;
 			const printproto = "void print(int i){}";
 			code = printproto ~ code;
 			ParseTree p = SC(code);
 			if (p.end - p.begin < code.length ) {
-				"Parse Error !!\n\n".writeln;
+				stderr.writeln("Parse Error !!\n\n");
 				exit(1);
 			}
 			SCTree g = new SCTree(p);
 			if (!g.tryTrim()) {
-				"reserved Error".writeln;
+				stderr.writeln("reserved Error");
 				exit(1);
 			}
 			 if(verbose)g.writeln;
 			if (!(new SemanticAnalyze().startAnalyze(g))){
-				"Using Illegal Semantics !!!".writeln;
+				stderr.writeln("Using Illegal Semantics !!!");
 				exit(1);
 			}
 			auto global = new Global(g);
@@ -39,11 +39,11 @@ static if (!makeModule){
 			new ToOffset(global);
 			if(verbose)global.writeln;
 			new ToMips().toMipsCode(global).writeln;
-		//}
-		//catch{
-		//	"illegal code!".writeln;
-		//	exit(1);
-		//}
+		}
+		catch{
+			stderr.writeln("illegal code!");
+			exit(1);
+		}
 	}
 }
 void main(string[] args){
@@ -75,7 +75,7 @@ void main(string[] args){
 unittest{
 	optimize = false;
 	//verbose = true;
-	//[
+	[
 		//"int main(){print(111);print(444);}",
 		//"int d(){}int main(){print(111);d();print(444);}",
 		//"int d(){print(112);}int main(){d();d();}",
@@ -89,22 +89,22 @@ unittest{
 		//"int main(){int a,b,c;a = 112 ;b = 4434 * 3;c = 10;if(a)print(a + b >=  555 + a / 22 );}",
 		//"int fa(int n){	if(n == 0)return 1;else return n * fa(n-1);}int main(){ print(fa(4));}",
 		//"int a;int main(){a = 72;print(a);}",
-	//	"int main(){int a,b,c;a = 10;b = 20;c = b;print(a + b + c);}"
-	//].each!analyze;
+		"int main(){int a,b,c;a = 10;b = 20;c = b;print(a + b + c);}"
+	].each!analyze;
 
-	[ 
+	//[
 	//	"arith.sc", //#
-		"array.sc", //#
+	//	"array.sc", //#
 	//	"cmp.sc", //#
 	//	"fib.sc", //#
 	//	"gcd.sc", //#
 	//	"global.sc", //#
-	//	"logic.sc", //#	
+	//	"logic.sc", //#
 	//	"scope.sc", //#
 	//	"swap.sc", //#
 	//	"while.sc", //#
-	].map!(a=>"../../smallcCode/basic/" ~ a)
-		.each!(a=>readText(a).analyze());
+	//].map!(a=>"../../smallcCode/basic/" ~ a)
+	//	.each!(a=>readText(a).analyze());
 	/+
 	[
 		"ack.sc",
@@ -126,17 +126,18 @@ unittest{
 
 string dlangAA = `
 #   _   _    smallC->mips compiler by murata !
-#  (_) (_)   written in dlang !! awesome !   
+#  (_) (_)   written in dlang !! awesome !
 # /______ \  thanks for the package PEGGED !!
-# \\(O(O \/   
+# \\(O(O \/
 #  | | | |   for more information,see
 #  | |_| |     https://github.com/Muratam/d-sccompiler !
-# /______/   usage : 
+# /______/   usage :
 #   <   >      $rdmd main.d # input smallcCode std-in or
 #  (_) (_)     $rdmd main.d hoge.sc # specify filename
 #            option :
-#              -N : not optimize 
+#              -N : not optimize
 #              -V : verbose (output intermediate process too)
 #              -F : show flow graph (make flow.png in current directory)
 #              -C : not show comment
+#            DlangAA :thanks to https://gist.github.com/simdnyan/20e8fa2a2736c315e2c1
 `;
