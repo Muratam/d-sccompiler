@@ -56,7 +56,7 @@ class SemanticAnalyze{
 	SCType[string][] env ;
 	SCType[string] getInitEnv(){return ["":new SCType("")].init;}
 	SCType writeTypeError(SCTree t,string str){
-		stderr.writeln(str ~ " [" ~ t.begin.to!string ~ "," ~t.end.to!string ~ "]");
+		stderr.writeln(str ~" " ~  t.getLineNumberMessage());
 		errored = true;
 		return null;
 	}
@@ -229,10 +229,10 @@ class SemanticAnalyze{
 			final switch (operator){
 			case "&":
 				if(t[1].length == 1 && t[1][0].tag == "ID"){
-					return op1(type1,["int","int *"]);
+					return op1(t,type1,["int","int *"]);
 				}else return writeTypeError(t,"can't '&' operator not for variable");
 			case "*":
-				return op1(type1,["int *","int"],["int * *","int *"]);
+				return op1(t,type1,["int *","int"],["int * *","int *"]);
 			}
 		case 3:
 			auto type1 = checkType(t[0]);
@@ -242,19 +242,19 @@ class SemanticAnalyze{
 			auto Operator = t[1].elem;
 			final switch(Operator){
 			case "+":
-				return op2(type1,type2
+				return op2(t,type1,type2
 					,["int","int","int"]
 					,["int","int *","int *"]
 					,["int","int * *","int * *"]
 					,["int *","int","int *"]
 					,["int * *","int","int * *"]);
 			case "-":
-				return op2(type1,type2
+				return op2(t,type1,type2
 					,["int","int","int"]
 					,["int *","int","int *"]
 					,["int * *","int","int * *"]);
 			case "*":case "/": case "&&":case "||":
-				return op2(type1,type2,["int","int","int"]);
+				return op2(t,type1,type2,["int","int","int"]);
 			case "==":case "!=":case ">": case "<": case "<=":case ">=":
 				return type1.sameType(type2) ? new SCType("int"): null;
 			case ",":
@@ -267,16 +267,16 @@ class SemanticAnalyze{
 			}
 		}
 	}
-	private SCType op1(SCType t1,string[][] prods ...){
+	private SCType op1(SCTree t,SCType t1,string[][] prods ...){
 		foreach(prod;prods){
 			auto from = prod[0];
 			auto to   = prod[1];
 			if (t1.type == from)
 				return new SCType(to,Info.normal);
 		}
-		return null;
+		return writeTypeError(t,"type error !!");
 	}
-	private SCType op2(SCType t1,SCType t2,string[][] prods ...){
+	private SCType op2(SCTree t,SCType t1,SCType t2,string[][] prods ...){
 		foreach(prod;prods){
 			auto from1 = prod[0];
 			auto from2 = prod[1];
@@ -284,7 +284,7 @@ class SemanticAnalyze{
 			if (t1.type == from1 && t2.type == from2)
 				return new SCType(to,Info.expr);
 		}
-		return null;
+		return writeTypeError(t,"type error !!");
 	}
 
 

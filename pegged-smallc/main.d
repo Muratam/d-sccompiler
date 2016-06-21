@@ -18,6 +18,7 @@ static if (!makeModule){
 			if(showComment) ("# " ~ code.replace("\n","\n#")).writeln;
 			const printproto = "void print(int i){}";
 			code = printproto ~ code;
+			SCTree.setNewLines(code);
 			ParseTree p = SC(code);
 			if (p.end - p.begin < code.length ) {
 				stderr.writeln("Parse Error !!\n\n");

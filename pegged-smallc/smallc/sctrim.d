@@ -1,7 +1,7 @@
 module smallc.sctrim;
 import std.stdio,std.algorithm,std.math,std.range,std.string,std.conv;
 import pegged.grammar;
-
+import std.typecons;
 //envなどを含むクラスにする
 
 //trimExpr         : Expr系の トリミング
@@ -16,6 +16,24 @@ import pegged.grammar;
 //         -a : 0 - a 
 
 class SCTree{
+	static int[] newLines;
+	public static void setNewLines(string code){
+		newLines = [];
+		foreach(int i,c;code)if (c == '\n') newLines ~= i;			
+	}
+	public string getLineNumberMessage(){
+		string res(int i,int r){
+			return "[行:" ~ i.to!string ~ ",列:"~ r.to!string  ~ "]";
+		}
+		for(int i = 0;i < newLines.length + 1 ; i ++){
+			if(i == newLines.length || begin < newLines[i]) {
+				return res(i+1,i == 0 ? 0 :begin - newLines[i-1]);
+			}
+		}
+		return newLines.to!string ~ begin.to!string;
+	}
+
+
 	public int begin = 0, end = 0;
 	public string elem = ""; 
 	public string tag = ""; 
@@ -93,7 +111,7 @@ class SCTree{
 		foreach(c;p.children)hits ~= new SCTree(c);
 	}
 	public bool writeError(string str){
-		writeln(str ~ " [" ~ begin.to!string ~ "," ~ end.to!string ~ "]");
+		stderr.writeln(str ~ " " ~ getLineNumberMessage());
 		return false;
 	}
 	private SCTree makeTypeInfo(SCTree type,bool ptr = false,string arrayNum = ""){
