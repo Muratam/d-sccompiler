@@ -92,7 +92,7 @@ class LabeledBlock{
 		}
 		genLabel(global);
 		if(main.showflow)toGraphiz(blocks.values());
-		global.usedMap =  analyze(blocks);
+		analyze(blocks);
 	}
 
 	string toGraphizNode(){
@@ -158,75 +158,16 @@ class LabeledBlock{
 			escapeShellCommand("open",graphName) 
 			);
 	}
-	static string[] analyze(LabeledBlock[string] blocks){
+	static void analyze(LabeledBlock[string] blocks){
 		if ("BEGIN" !in blocks) return null;
 		recursiveAnalyze(blocks["BEGIN"],blocks);
-		bool[string] usedMap; 
-		bool[string] varMap;
-		foreach(block;blocks){
-			//block.label.writeln;
-			foreach(stmt;block.stmts){
-				//stmt.inTable.writeln;
-				foreach(key;stmt.outTable.keys){
-					if(stmt.outTable[key].used){
-						usedMap[key] = true;
-					}
-					varMap[key] = true;
-				}
-			}
-		}
-		//usedMap.keys.writeln("pre used");
-		checkRecursiveUsed(blocks,usedMap,varMap);
-		//usedMap.keys.writeln("pro used");
-		return usedMap.keys;
-	}
-	static void checkRecursiveUsed(ref LabeledBlock[string] blocks,ref bool[string] usedMap,ref bool[string] varMap){
-		bool needUpdate = false;
-		void updateUsed(Flow[string] flowTable, string name){
-			if (name == "") return ;
-			if (name in flowTable){
-				if (flowTable[name].flowType == Flow.FlowType.Konst) return;
-			}
-			if (name !in usedMap) needUpdate  = true;
-			usedMap[name] = true;
-		}
-		void recursiveUsed(Flow[string] flowTable, string name){
-			with (flowTable[name]){
-
-				if (name !in usedMap) return;
-				switch(flowType){
-					case Flow.FlowType.OtherVar:
-						updateUsed(flowTable,otherVar);
-						break;
-					case Flow.FlowType.Any:
-						updateUsed(flowTable,dependR);
-						updateUsed(flowTable,dependL);
-						break;
-					default:break;
-				}
-			}
-		}
-		foreach(block;blocks){
-			foreach(stmt;block.stmts){
-				foreach(name;stmt.outTable.keys){
-					recursiveUsed(stmt.outTable,name);
-					if(needUpdate){ 
-						checkRecursiveUsed(blocks,usedMap,varMap);
-						return ;
-					}
-				}
-			}
-		}
-
 	}
 
 	static void recursiveAnalyze(LabeledBlock block,LabeledBlock[string] blocks,Flow[string] flowTable = ["":Flow(Flow.FlowType.Any)]){
-		//flowTable.writeln(": recursive");
-		//block.label.writeln;
+		//各ブロックごとに調べる
 		auto outTable = block.analyzeSelf(flowTable);
 		if (outTable == null) return;
 		foreach(to;block.tos){
-			//to.writeln(": to");
 			if(to != "END")
 				recursiveAnalyze(blocks[to],blocks,outTable);
 		}
@@ -239,7 +180,6 @@ class LabeledBlock{
 		foreach(k2;keys2){
 			if(!keys1.canFind(k2))res ~= k2;
 		}
-		//if(res != null)res.writeln("is diff");
 		return res != null;
 	}
 
@@ -248,16 +188,11 @@ class LabeledBlock{
 		if (hasDifference(flow.keys,inTable.keys)) {
 			return false;
 		}
-		//flow.writeln;
-		//inTable.writeln;
 		foreach(key;flow.keys){
 			if(flow[key] == inTable[key]) continue;
 			if(inTable[key].flowType == Flow.FlowType.Any)
 				continue;
 			else {
-				//key.writeln;
-				//flow[key].writeln;
-				//inTable[key].writeln;
 				return false;
 			}
 		}
@@ -265,16 +200,14 @@ class LabeledBlock{
 	}
 
 	Flow[string]  analyzeSelf(Flow[string] flowTable){
+		//各Statementを調べる
 		if(stmts.length > 0 ){
-			//this.label.writeln;
 			if(compareTables(flowTable,stmts[0].inTable) ){
-			//	"return same".writeln;
 				return null;
 			}
 		}
 		foreach(stmt;stmts){
 			flowTable = analyzeStmt(stmt,flowTable);
-			//stmt.outTable.writeln;
 		}
 		return flowTable;
 	}
@@ -299,10 +232,7 @@ class LabeledBlock{
 				if(toTable[key].flowType == Flow.FlowType.Any){
 					continue;
 				} 
-				//toTable[key].writeln (" is to");
-				//fromTable[key].writeln(" is from");
 				if (toTable[key] != fromTable[key]){
-				//	"toAny".writeln;
 					toTable[key].flowType = Flow.FlowType.Any;
 					if( toTable[key].dependR != ""
 						&& toTable[key].dependL != ""
@@ -321,9 +251,6 @@ class LabeledBlock{
 	static Flow[string] analyzeStmt(Stmt stmt,Flow[string] flowTable){
 		addTable(flowTable,stmt.inTable);
 		stmt.outTable = stmt.inTable.dup();
-		//stmt.writeln;
-		//stmt.inTable.writeln;
-		//stmt.outTable.writeln;
 		void addUsed(string name){
 			if(name !in stmt.outTable)
 				stmt.outTable[name] = Flow(Flow.FlowType.Any);

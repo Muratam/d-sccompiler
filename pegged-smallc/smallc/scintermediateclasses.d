@@ -56,7 +56,6 @@ class Var {
 class Global{
 	public Var_def[] var_defs = [];
 	public Fun_def[] fun_defs = [];
-	public string[] usedMap;
 	public bool[string] withNoPtrFunctionMap;
 	public this (SCTree t){
 		Var_def.init();
@@ -433,32 +432,34 @@ class CmpdStmt : Stmt{
 	}
 
 }
-public struct Flow {
-	enum FlowType{
+public class Flow {
+	public enum FlowType{
 		Konst, //定数値畳み込み
 		OtherVar, // コピー伝播
 		Any,
 	};
-	FlowType flowType = FlowType.Any;
-	bool used = false; // => 不要代入文除去
-	int konstValue = 0;
-	string otherVar = null;
-	string dependR = "",dependL= "";
-	this(FlowType flowType,int konstValue){
+	public FlowType flowType = FlowType.Any;
+	public int konstValue = 0;
+	public Var otherVar = null;
+	public Stmt[string] depends; //依存しているStatement
+	bool used = false;
+	public this(FlowType flowType,int konstValue){
 		this.flowType = flowType;
 		this.konstValue = konstValue;
 	}
-	this(FlowType flowType,string otherVar){
+	public this(FlowType flowType,Var otherVar,Stmt stmt){
 		this.flowType = flowType;
 		this.otherVar = otherVar;
+		this.depends[otherVar.name] = stmt;
 	}
-	this(FlowType flowType,string dependR="",string dependL=""){
+	public this(FlowType flowType,Stmt stmt,string names){
 		this.flowType = flowType;
-		this.dependR=dependR;
-		this.dependL=dependL;
+		foreach(name;names){
+			this.depends[name] = stmt;
+		}
 	}
 
-	string toString() {
+	public override string toString() const {
 		return flowType.predSwitch(
 			FlowType.Konst,konstValue.to!string,
 			FlowType.OtherVar,otherVar,
